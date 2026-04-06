@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   createBrowserSupabaseClient,
@@ -30,7 +30,6 @@ function isGoogleProviderDisabled(err: unknown): boolean {
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otpCode, setOtpCode] = useState("");
@@ -38,6 +37,7 @@ export default function LoginPage() {
   const [emailVerified, setEmailVerified] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleVerifyFlow, setGoogleVerifyFlow] = useState(false);
+  const [nextPath, setNextPath] = useState("/dashboard");
   const autoOtpTriggeredRef = useRef(false);
 
   const supabase = createBrowserSupabaseClient();
@@ -177,7 +177,7 @@ export default function LoginPage() {
       setEmailVerified(true);
       toast.success("Email verified.");
       if (googleVerifyFlow) {
-        router.push(searchParams.get("next") || "/dashboard");
+        router.push(nextPath);
       }
     } catch (err: unknown) {
       toast.error(getErrorMessage(err) ?? "Invalid verification code.");
@@ -188,15 +188,21 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (autoOtpTriggeredRef.current) return;
-    const shouldVerifyGoogle = searchParams.get("google_verify") === "1";
-    const emailFromGoogle = searchParams.get("email") ?? "";
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const shouldVerifyGoogle = params.get("google_verify") === "1";
+    const emailFromGoogle = params.get("email") ?? "";
+    const next = params.get("next");
+    if (next && next.startsWith("/")) {
+      setNextPath(next);
+    }
     if (!shouldVerifyGoogle || !emailFromGoogle) return;
     autoOtpTriggeredRef.current = true;
     setGoogleVerifyFlow(true);
     setEmail(emailFromGoogle);
     void sendEmailVerificationCodeFor(emailFromGoogle);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, []);
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-12">

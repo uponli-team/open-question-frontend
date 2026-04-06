@@ -6,9 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export default async function ProblemDetailPage({
   params,
 }: Readonly<{
-  params: { id: string };
+  params: Promise<{ id: string }> | { id: string };
 }>) {
-  const problem = await getProblemById(params.id);
+  const resolvedParams =
+    typeof (params as Promise<{ id: string }>).then === "function"
+      ? await (params as Promise<{ id: string }>)
+      : (params as { id: string });
+
+  const id = decodeURIComponent(resolvedParams.id ?? "");
+  const problem = await getProblemById(id);
   if (!problem) notFound();
 
   const created =
@@ -28,9 +34,43 @@ export default async function ProblemDetailPage({
           {created && <span className="text-sm text-zinc-500">{created}</span>}
         </div>
         <h1 className="mt-4 text-balance text-3xl font-semibold leading-tight tracking-tight text-zinc-950 md:text-4xl">
-          {problem.problem}
+          Problem Details
         </h1>
+        <p className="mt-2 text-sm text-zinc-600">
+          Complete information for this open problem.
+        </p>
       </div>
+
+      <Card className="border-zinc-200 bg-white">
+        <CardHeader>
+          <CardTitle>Problem statement</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-base leading-7 text-zinc-800">{problem.problem}</div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-zinc-200 bg-white">
+        <CardHeader>
+          <CardTitle>Metadata</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-zinc-700">
+          <div>
+            <span className="font-semibold text-zinc-900">Problem ID: </span>
+            <span>{problem.id}</span>
+          </div>
+          <div>
+            <span className="font-semibold text-zinc-900">Field: </span>
+            <span>{problem.field}</span>
+          </div>
+          {created && (
+            <div>
+              <span className="font-semibold text-zinc-900">Created: </span>
+              <span>{created}</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-zinc-200 bg-white">
         <CardHeader>
@@ -38,14 +78,18 @@ export default async function ProblemDetailPage({
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
-            {problem.keywords.map((k) => (
-              <span
-                key={k}
-                className="rounded-full bg-zinc-100 px-3 py-1 text-sm text-zinc-700"
-              >
-                {k}
-              </span>
-            ))}
+            {problem.keywords.length > 0 ? (
+              problem.keywords.map((k) => (
+                <span
+                  key={k}
+                  className="rounded-full bg-zinc-100 px-3 py-1 text-sm text-zinc-700"
+                >
+                  {k}
+                </span>
+              ))
+            ) : (
+              <span className="text-sm text-zinc-500">No keywords available.</span>
+            )}
           </div>
         </CardContent>
       </Card>
