@@ -1,0 +1,66 @@
+import { notFound } from "next/navigation";
+import { getProblemById } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+export default async function ProblemDetailPage({
+  params,
+}: Readonly<{
+  params: { id: string };
+}>) {
+  const problem = await getProblemById(params.id);
+  if (!problem) notFound();
+
+  const created =
+    problem.created_at && !Number.isNaN(Date.parse(problem.created_at))
+      ? new Date(problem.created_at).toLocaleString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "2-digit",
+        })
+      : null;
+
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col gap-8">
+      <div className="border-b border-zinc-200 pb-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">{problem.field}</Badge>
+          {created && <span className="text-sm text-zinc-500">{created}</span>}
+        </div>
+        <h1 className="mt-4 text-balance text-3xl font-semibold leading-tight tracking-tight text-zinc-950 md:text-4xl">
+          {problem.problem}
+        </h1>
+      </div>
+
+      <Card className="border-zinc-200 bg-white">
+        <CardHeader>
+          <CardTitle>Keywords</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            {problem.keywords.map((k) => (
+              <span
+                key={k}
+                className="rounded-full bg-zinc-100 px-3 py-1 text-sm text-zinc-700"
+              >
+                {k}
+              </span>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="rounded-2xl border border-zinc-200 bg-white p-6">
+        <div className="text-sm font-semibold text-zinc-950">
+          Next steps
+        </div>
+        <div className="mt-2 text-sm leading-relaxed text-zinc-600">
+          This is a UI placeholder. When your backend is connected, OQD can
+          show extracted sources, discussion threads, and model-assisted
+          summaries here.
+        </div>
+      </div>
+    </div>
+  );
+}
+
