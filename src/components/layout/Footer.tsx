@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Brain } from "lucide-react";
+import Image from "next/image";
 
 export default function Footer() {
   return (
@@ -8,10 +8,13 @@ export default function Footer() {
         <div className="grid gap-12 md:grid-cols-3">
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <div className="relative">
-                <Brain className="h-6 w-6 text-emerald-600" />
-                <div className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-600" />
-              </div>
+              <Image
+                src="/logo.png"
+                alt="OQD Logo"
+                width={32}
+                height={32}
+                className="h-8 w-8 object-contain rounded-full bg-white shadow-sm"
+              />
               <span className="text-xl font-bold text-emerald-600">OQD</span>
             </div>
             <p className="text-sm leading-relaxed text-gray-600">

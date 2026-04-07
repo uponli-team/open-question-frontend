@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Atom } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createBrowserSupabaseClient } from "@/lib/supabaseClient";
 import { clearDevAuthClient } from "@/lib/devAuth.client";
@@ -91,10 +91,15 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-gray-200 bg-white transition-colors duration-300">
       <div className="container mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-xl border border-emerald-200 bg-emerald-50">
-            <Atom className="h-5 w-5 text-emerald-700" />
-          </div>
+        <div className="flex items-center gap-2">
+          <Image
+            src="/logo.png"
+            alt="OQD Logo"
+            width={40}
+            height={40}
+            className="h-10 w-10 object-contain rounded-full bg-white shadow-sm"
+            priority
+          />
           <Link
             href="/"
             className="text-xl font-semibold tracking-tight text-zinc-900 transition-colors hover:text-emerald-700 sm:text-2xl"
