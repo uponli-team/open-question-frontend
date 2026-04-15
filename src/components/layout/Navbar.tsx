@@ -23,6 +23,7 @@ export default function Navbar() {
       { label: "Services", id: "services" },
       { label: "Process", id: "process" },
       { label: "Blogs", id: "blogs" },
+      { label: "Leaderboard", id: "leaderboard" },
       { label: "Pricing", id: "pricing" },
       { label: "Preview", id: "preview" },
       { label: "Contact", id: "contact" },

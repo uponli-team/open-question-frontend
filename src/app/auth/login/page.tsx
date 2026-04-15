@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -28,17 +28,17 @@ function isGoogleProviderDisabled(err: unknown): boolean {
   );
 }
 
+function isNetworkFetchError(err: unknown): boolean {
+  const msg = getErrorMessage(err)?.toLowerCase() ?? "";
+  return msg.includes("failed to fetch") || msg.includes("networkerror");
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [googleVerifyFlow, setGoogleVerifyFlow] = useState(false);
-  const [nextPath, setNextPath] = useState("/dashboard");
-  const autoOtpTriggeredRef = useRef(false);
 
   const supabase = createBrowserSupabaseClient();
 
@@ -76,133 +76,42 @@ export default function LoginPage() {
     }
   }
 
-  async function onEmailLogin(e: React.FormEvent) {
+  async function onEmailSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isSupabaseConfigured() || !supabase) {
       loginTemporarily();
       return;
     }
-    if (!emailVerified) {
-      toast.error("Verify your email first using the code we send.");
-      return;
-    }
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { error } =
+        mode === "signin"
+          ? await supabase.auth.signInWithPassword({ email, password })
+          : await supabase.auth.signUp({ email, password });
       if (error) throw error;
-      toast.success("Signed in.");
-      router.push("/dashboard");
-    } catch (err: unknown) {
-      toast.error(getErrorMessage(err) ?? "Email sign-in failed.");
-      loginTemporarily();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function sendEmailVerificationCode() {
-    if (!isSupabaseConfigured() || !supabase) {
-      toast.error("Supabase is not configured yet.");
-      return;
-    }
-    if (!email.trim()) {
-      toast.error("Enter your email first.");
-      return;
-    }
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: { shouldCreateUser: true },
-      });
-      if (error) throw error;
-      setOtpSent(true);
-      setEmailVerified(false);
-      toast.success("Verification code sent to your email.");
-    } catch (err: unknown) {
-      toast.error(
-        getErrorMessage(err) ??
-          "Could not send verification code. Check Supabase Auth logs and SMTP settings.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function sendEmailVerificationCodeFor(targetEmail: string) {
-    if (!isSupabaseConfigured() || !supabase) return;
-    const cleaned = targetEmail.trim();
-    if (!cleaned) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: cleaned,
-        options: { shouldCreateUser: true },
-      });
-      if (error) throw error;
-      setOtpSent(true);
-      setEmailVerified(false);
-      toast.success("We sent an email to verify your email.");
-    } catch (err: unknown) {
-      toast.error(
-        getErrorMessage(err) ??
-          "Could not send verification email. Check Supabase Auth logs and SMTP settings.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function verifyEmailCode() {
-    if (!isSupabaseConfigured() || !supabase) {
-      toast.error("Supabase is not configured yet.");
-      return;
-    }
-    if (!email.trim() || !otpCode.trim()) {
-      toast.error("Enter both email and verification code.");
-      return;
-    }
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        email: email.trim(),
-        token: otpCode.trim(),
-        type: "email",
-      });
-      if (error) throw error;
-      setEmailVerified(true);
-      toast.success("Email verified.");
-      if (googleVerifyFlow) {
-        router.push(nextPath);
+      if (mode === "signup") {
+        toast.success("Account created. Check your email to confirm, then sign in.");
+      } else {
+        toast.success("Signed in.");
+        router.push("/dashboard");
       }
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err) ?? "Invalid verification code.");
+      if (isNetworkFetchError(err)) {
+        toast.error(
+          "Auth service is unreachable right now. Check network/Supabase settings. Using temporary local access.",
+        );
+        loginTemporarily();
+        return;
+      }
+      toast.error(
+        getErrorMessage(err) ??
+          (mode === "signup" ? "Email sign-up failed." : "Email sign-in failed."),
+      );
     } finally {
       setLoading(false);
     }
   }
-
-  useEffect(() => {
-    if (autoOtpTriggeredRef.current) return;
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const shouldVerifyGoogle = params.get("google_verify") === "1";
-    const emailFromGoogle = params.get("email") ?? "";
-    const next = params.get("next");
-    if (next && next.startsWith("/")) {
-      setNextPath(next);
-    }
-    if (!shouldVerifyGoogle || !emailFromGoogle) return;
-    autoOtpTriggeredRef.current = true;
-    setGoogleVerifyFlow(true);
-    setEmail(emailFromGoogle);
-    void sendEmailVerificationCodeFor(emailFromGoogle);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-12">
@@ -211,19 +120,13 @@ export default function LoginPage() {
           OQD Authentication
         </div>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950">
-          Sign in
+          Authentication
         </h1>
         <p className="mt-2 text-sm text-zinc-600">
-          Use Google or email login. Dashboard routes are protected when
-          Supabase is configured.
+          Use Google or email. Choose sign in if you already have an account,
+          or sign up to create one.
         </p>
       </div>
-
-      {googleVerifyFlow && (
-        <div className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
-          We sent a verification email. Verify your email to complete Google sign in.
-        </div>
-      )}
 
       {!isSupabaseConfigured() && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -233,7 +136,28 @@ export default function LoginPage() {
       )}
 
       <div className="rounded-2xl border border-black/10 bg-white/70 p-6 shadow-sm backdrop-blur">
-        <form className="grid gap-3" onSubmit={onEmailLogin}>
+        <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-zinc-100 p-1">
+          <button
+            type="button"
+            onClick={() => setMode("signin")}
+            className={`rounded-lg px-3 py-2 text-sm font-medium ${
+              mode === "signin" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600"
+            }`}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("signup")}
+            className={`rounded-lg px-3 py-2 text-sm font-medium ${
+              mode === "signup" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600"
+            }`}
+          >
+            Sign Up
+          </button>
+        </div>
+
+        <form className="grid gap-3" onSubmit={onEmailSubmit}>
           <label className="text-sm font-medium text-zinc-900" htmlFor="email">
             Email
           </label>
@@ -241,53 +165,11 @@ export default function LoginPage() {
             id="email"
             type="email"
             value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              setEmailVerified(false);
-            }}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             required
             autoComplete="email"
           />
-          <Button
-            type="button"
-            onClick={sendEmailVerificationCode}
-            disabled={loading}
-            size="sm"
-            variant="secondary"
-          >
-            {otpSent ? "Resend verification code" : "Send verification code"}
-          </Button>
-
-          {otpSent && (
-            <>
-              <label className="text-sm font-medium text-zinc-900" htmlFor="otpCode">
-                Verification code
-              </label>
-              <Input
-                id="otpCode"
-                type="text"
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value)}
-                placeholder="Enter code from email"
-                required={!emailVerified}
-              />
-              <Button
-                type="button"
-                onClick={verifyEmailCode}
-                disabled={loading}
-                size="sm"
-                variant="secondary"
-              >
-                Verify email
-              </Button>
-            </>
-          )}
-          {emailVerified && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              Email verified successfully.
-            </div>
-          )}
 
           <label className="text-sm font-medium text-zinc-900" htmlFor="password">
             Password
@@ -303,7 +185,7 @@ export default function LoginPage() {
           />
 
           <Button type="submit" disabled={loading} size="lg" variant="outline">
-            Sign in with Email
+            {mode === "signin" ? "Sign in with Email" : "Sign up with Email"}
           </Button>
         </form>
 

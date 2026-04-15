@@ -38,6 +38,9 @@ export default function Footer() {
               <Link href="/#process" className="hover:text-emerald-600">
                 Process
               </Link>
+              <Link href="/#leaderboard" className="hover:text-emerald-600">
+                Leaderboard
+              </Link>
               <Link href="/#preview" className="hover:text-emerald-600">
                 Preview
               </Link>
@@ -56,6 +59,12 @@ export default function Footer() {
               Built with Next.js, Supabase-ready auth and realtime hooks, and mock
               APIs for fast iteration.
             </p>
+            <Link
+              href="/dashboard/leaderboard"
+              className="mt-3 inline-block text-sm font-medium text-emerald-700 hover:underline"
+            >
+              Open Leaderboard Workspace →
+            </Link>
           </div>
         </div>
 

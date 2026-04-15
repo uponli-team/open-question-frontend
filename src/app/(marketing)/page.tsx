@@ -17,6 +17,8 @@ import {
   Users,
   LineChart,
   Headphones,
+  Trophy,
+  ExternalLink,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
@@ -74,6 +76,14 @@ const featuresThree = [
     iconBg: "bg-lime-100",
     iconColor: "text-lime-700",
   },
+];
+
+const leaderboard = [
+  { rank: "#1", model: "o3 Pro", org: "OpenAI", solved: "75 / 500", rate: "15.0%" },
+  { rank: "#2", model: "Gemini 2.5 Pro", org: "Google", solved: "25 / 500", rate: "5.0%" },
+  { rank: "#3", model: "o4 mini", org: "OpenAI", solved: "25 / 500", rate: "5.0%" },
+  { rank: "#4", model: "o3", org: "OpenAI", solved: "44 / 500", rate: "8.8%" },
+  { rank: "#5", model: "DeepSeek R1", org: "DeepSeek", solved: "11 / 500", rate: "2.2%" },
 ];
 
 export default function MarketingLandingPage() {
@@ -617,6 +627,68 @@ export default function MarketingLandingPage() {
               </motion.div>
             ))}
           </motion.div>
+        </FadeInSection>
+
+        <FadeInSection
+          id="leaderboard"
+          className="scroll-mt-24 border-y border-gray-100 bg-gray-50/50 py-20 px-[clamp(24px,4vw,64px)]"
+        >
+          <div className="mb-12 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              <Trophy className="h-3.5 w-3.5" />
+              UQ INSPIRED LEADERBOARD
+            </div>
+            <h2 className="mt-4 text-3xl font-bold uppercase tracking-tight text-gray-900 md:text-5xl">
+              Leaderboard
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-gray-600">
+              Inspired by Stanford&apos;s Unsolved Questions project, this view highlights
+              progress on hard, real-world open questions.
+            </p>
+          </div>
+
+          <Card className="overflow-hidden border-0 shadow-lg">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-zinc-100 text-zinc-700">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Rank</th>
+                    <th className="px-4 py-3 font-semibold">System</th>
+                    <th className="px-4 py-3 font-semibold">Organization</th>
+                    <th className="px-4 py-3 font-semibold">Solved</th>
+                    <th className="px-4 py-3 font-semibold">Pass Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaderboard.map((row, idx) => (
+                    <motion.tr
+                      key={row.rank}
+                      initial={{ opacity: 0, y: 8 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.35, delay: idx * 0.05 }}
+                      className="border-t border-zinc-100 bg-white"
+                    >
+                      <td className="px-4 py-3 font-semibold text-zinc-900">{row.rank}</td>
+                      <td className="px-4 py-3 text-zinc-900">{row.model}</td>
+                      <td className="px-4 py-3 text-zinc-600">{row.org}</td>
+                      <td className="px-4 py-3 text-zinc-700">{row.solved}</td>
+                      <td className="px-4 py-3 text-emerald-700">{row.rate}</td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <div className="mt-8 flex justify-center">
+            <Link href="/dashboard/leaderboard">
+              <Button variant="outline" className="border-emerald-200 text-emerald-700">
+                Open Full Leaderboard Workspace
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
         </FadeInSection>
 
         <FadeInSection id="pricing" className="scroll-mt-24 py-20 px-[clamp(24px,4vw,64px)]">

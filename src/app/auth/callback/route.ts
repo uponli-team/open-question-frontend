@@ -32,14 +32,5 @@ export async function GET(request: NextRequest) {
     loginUrl.searchParams.set("error", "oauth_exchange_failed");
     return NextResponse.redirect(loginUrl);
   }
-
-  const { data } = await supabase.auth.getUser();
-  const googleEmail = data.user?.email;
-
-  // For the requested flow: after selecting Google account, prompt email verification step.
-  await supabase.auth.signOut();
-  loginUrl.searchParams.set("google_verify", "1");
-  loginUrl.searchParams.set("next", nextPath);
-  if (googleEmail) loginUrl.searchParams.set("email", googleEmail);
-  return NextResponse.redirect(loginUrl);
+  return NextResponse.redirect(new URL(nextPath, request.url));
 }
