@@ -95,7 +95,6 @@ export default function DashboardProblemsClient() {
         <span className="font-semibold text-zinc-900">{total}</span>{" "}
         results
       </motion.div>
-
       <ProblemList problems={items} loading={loading} />
 
       <PaginationControls

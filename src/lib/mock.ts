@@ -397,3 +397,27 @@ export function addMockProblems(
   return created;
 }
 
+export function updateMockProblem(
+  id: string,
+  updates: Partial<Omit<Problem, "id" | "created_at">>,
+): Problem | null {
+  const idx = mockProblems.findIndex((p) => p.id === id);
+  if (idx < 0) return null;
+  const next = {
+    ...mockProblems[idx],
+    ...updates,
+  };
+  mockProblems = [
+    ...mockProblems.slice(0, idx),
+    next,
+    ...mockProblems.slice(idx + 1),
+  ];
+  return next;
+}
+
+export function deleteMockProblem(id: string): boolean {
+  const before = mockProblems.length;
+  mockProblems = mockProblems.filter((p) => p.id !== id);
+  return mockProblems.length < before;
+}
+

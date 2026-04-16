@@ -2,20 +2,30 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { createBrowserSupabaseClient } from "@/lib/supabaseClient";
 import { clearDevAuthClient } from "@/lib/devAuth.client";
+import { getUserProfileById, hasAdminAccess } from "@/lib/api";
 import type { Session, User } from "@supabase/supabase-js";
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const accountRef = useRef<HTMLDivElement | null>(null);
 
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [user, setUser] = useState<User | null>(null);
+  const [canAccessAdmin, setCanAccessAdmin] = useState(false);
+  const displayName =
+    user?.user_metadata?.full_name ??
+    user?.user_metadata?.name ??
+    user?.email ??
+    "Account";
+  const initial = displayName.trim().charAt(0).toUpperCase() || "A";
 
   const navLinks = useMemo(
     () => [
@@ -41,11 +51,34 @@ export default function Navbar() {
     const { data } = supabase.auth.onAuthStateChange(
       (_event, session: Session | null) => {
         setUser(session?.user ?? null);
+        setAccountOpen(false);
       },
     );
 
     return () => data.subscription.unsubscribe();
   }, [supabase]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadProfileRole() {
+      if (!user) {
+        if (active) setCanAccessAdmin(false);
+        return;
+      }
+      try {
+        const profile = await getUserProfileById(user.id);
+        if (active) {
+          setCanAccessAdmin(hasAdminAccess(profile?.role));
+        }
+      } catch {
+        if (active) setCanAccessAdmin(false);
+      }
+    }
+    void loadProfileRole();
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   useEffect(() => {
     const hash = typeof window !== "undefined" ? window.location.hash : "";
@@ -72,6 +105,25 @@ export default function Navbar() {
     setOpen(false);
   }
 
+  function closeMenus() {
+    setOpen(false);
+    setAccountOpen(false);
+  }
+
+  // Close account dropdown when clicking anywhere outside the avatar/menu.
+  useEffect(() => {
+    if (!accountOpen) return;
+    function onClick(event: MouseEvent) {
+      const target = event.target as Node | null;
+      if (!accountRef.current || !target) return;
+      if (!accountRef.current.contains(target)) {
+        setAccountOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [accountOpen]);
+
   async function onLogout() {
     clearDevAuthClient();
     if (!supabase) {
@@ -81,6 +133,7 @@ export default function Navbar() {
     }
     try {
       await supabase.auth.signOut();
+      setAccountOpen(false);
       toast.success("Signed out.");
       router.push("/");
     } catch (err: unknown) {
@@ -120,30 +173,68 @@ export default function Navbar() {
               {item.label}
             </a>
           ))}
-          <Link
-            href="/dashboard"
-            className="shrink-0 whitespace-nowrap text-xs font-medium text-gray-500 transition-colors hover:text-zinc-900 lg:text-sm"
-          >
-            Dashboard
-          </Link>
+          {user && (
+            <Link
+              href="/dashboard"
+              className="shrink-0 whitespace-nowrap text-xs font-medium text-gray-500 transition-colors hover:text-zinc-900 lg:text-sm"
+            >
+              Dashboard
+            </Link>
+          )}
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
           {user ? (
-            <>
-              <Link href="/dashboard/admin">
-                <Button variant="outline" size="sm">
-                  Admin
-                </Button>
-              </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void onLogout()}
+            <div className="relative" ref={accountRef}>
+              <button
+                type="button"
+                aria-label="Open account menu"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-white text-sm font-semibold text-zinc-900 shadow-sm transition hover:border-emerald-400 hover:text-emerald-700"
+                onClick={() => setAccountOpen((value) => !value)}
               >
-                Logout
-              </Button>
-            </>
+                {initial}
+              </button>
+              {accountOpen && (
+                <div className="absolute right-0 top-12 z-50 w-56 rounded-2xl border border-zinc-200 bg-white p-2 shadow-lg">
+                  <div className="border-b border-zinc-100 px-3 py-2">
+                    <p className="text-sm font-semibold text-zinc-900">{displayName}</p>
+                    <p className="truncate text-xs text-zinc-500">{user.email}</p>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <Link
+                      href="/dashboard"
+                      className="block rounded-xl px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                      onClick={closeMenus}
+                    >
+                      Dashboard
+                    </Link>
+                    <Link
+                      href="/dashboard/settings"
+                      className="block rounded-xl px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                      onClick={closeMenus}
+                    >
+                      Change Password
+                    </Link>
+                    {canAccessAdmin && (
+                      <Link
+                        href="/dashboard/admin"
+                        className="block rounded-xl px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                        onClick={closeMenus}
+                      >
+                        Admin
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                      onClick={() => void onLogout()}
+                    >
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
             <>
               <Link href="/auth/login">
@@ -204,22 +295,42 @@ export default function Navbar() {
                 {item.label}
               </a>
             ))}
-            <Link
-              href="/dashboard"
-              className="block rounded-lg px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50"
-              onClick={() => setOpen(false)}
-            >
-              Dashboard
-            </Link>
+            {user && (
+              <Link
+                href="/dashboard"
+                className="block rounded-lg px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50"
+                onClick={() => setOpen(false)}
+              >
+                Dashboard
+              </Link>
+            )}
             {user ? (
               <>
+                <div className="flex items-center gap-3 rounded-lg border border-zinc-200 px-3 py-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-white text-sm font-semibold text-zinc-900">
+                    {initial}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-zinc-900">{displayName}</p>
+                    <p className="truncate text-xs text-zinc-500">{user.email}</p>
+                  </div>
+                </div>
                 <Link
-                  href="/dashboard/admin"
+                  href="/dashboard/settings"
                   className="block rounded-lg px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50"
                   onClick={() => setOpen(false)}
                 >
-                  Admin
+                  Change Password
                 </Link>
+                {canAccessAdmin && (
+                  <Link
+                    href="/dashboard/admin"
+                    className="block rounded-lg px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50"
+                    onClick={() => setOpen(false)}
+                  >
+                    Admin
+                  </Link>
+                )}
                 <button
                   type="button"
                   className="w-full rounded-lg px-3 py-2 text-left text-base font-medium text-gray-700 hover:bg-gray-50"

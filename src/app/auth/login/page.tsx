@@ -7,7 +7,6 @@ import {
   createBrowserSupabaseClient,
   isSupabaseConfigured,
 } from "@/lib/supabaseClient";
-import { setDevAuthClient } from "@/lib/devAuth.client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -39,14 +38,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   const supabase = createBrowserSupabaseClient();
-
-  function loginTemporarily() {
-    setDevAuthClient(email);
-    toast.success("Temporary local login enabled.");
-    router.push("/dashboard");
-  }
 
   async function onGoogleLogin() {
     if (!isSupabaseConfigured() || !supabase) {
@@ -79,7 +73,7 @@ export default function LoginPage() {
   async function onEmailSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isSupabaseConfigured() || !supabase) {
-      loginTemporarily();
+      toast.error("Supabase is not configured yet.");
       return;
     }
 
@@ -99,9 +93,8 @@ export default function LoginPage() {
     } catch (err: unknown) {
       if (isNetworkFetchError(err)) {
         toast.error(
-          "Auth service is unreachable right now. Check network/Supabase settings. Using temporary local access.",
+          "Auth service is unreachable right now. Check network/Supabase settings and try again.",
         );
-        loginTemporarily();
         return;
       }
       toast.error(
@@ -110,6 +103,31 @@ export default function LoginPage() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onForgotPassword() {
+    if (!email.trim()) {
+      toast.error("Enter your email first, then click forgot password.");
+      return;
+    }
+    if (!isSupabaseConfigured() || !supabase) {
+      toast.error("Password reset needs a configured Supabase project.");
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const redirectTo = `${window.location.origin}/auth/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo,
+      });
+      if (error) throw error;
+      toast.success("Password reset email sent.");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err) ?? "Could not send password reset email.");
+    } finally {
+      setResetLoading(false);
     }
   }
 
@@ -181,8 +199,19 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             required
-            autoComplete="current-password"
+            autoComplete={mode === "signin" ? "current-password" : "new-password"}
           />
+
+          {mode === "signin" && (
+            <button
+              type="button"
+              className="justify-self-start text-sm font-medium text-emerald-700 hover:underline"
+              onClick={() => void onForgotPassword()}
+              disabled={resetLoading || loading}
+            >
+              {resetLoading ? "Sending reset email..." : "Forgot password?"}
+            </button>
+          )}
 
           <Button type="submit" disabled={loading} size="lg" variant="outline">
             {mode === "signin" ? "Sign in with Email" : "Sign up with Email"}
@@ -220,16 +249,6 @@ export default function LoginPage() {
               />
             </svg>
             Continue with Google
-          </Button>
-          <Button
-            type="button"
-            onClick={loginTemporarily}
-            disabled={loading}
-            size="lg"
-            variant="ghost"
-            className="mt-2 w-full"
-          >
-            Continue with temporary login
           </Button>
         </div>
       </div>
