@@ -4,24 +4,21 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AttemptWorkspace from "@/components/problems/AttemptWorkspace";
 
+type PageSearchParams = Record<string, string | string[] | undefined>;
+
 export default async function ProblemDetailPage({
   params,
   searchParams,
 }: Readonly<{
   params: Promise<{ id: string }> | { id: string };
-  searchParams?:
-    | Promise<Record<string, string | string[] | undefined>>
-    | Record<string, string | string[] | undefined>;
+  searchParams?: Promise<PageSearchParams> | PageSearchParams;
 }>) {
   const resolvedParams =
     typeof (params as Promise<{ id: string }>).then === "function"
       ? await (params as Promise<{ id: string }>)
       : (params as { id: string });
   const resolvedSearchParams =
-    typeof (searchParams as Promise<Record<string, string | string[] | undefined>>)?.then ===
-    "function"
-      ? await (searchParams as Promise<Record<string, string | string[] | undefined>>)
-      : (searchParams ?? {});
+    (await Promise.resolve(searchParams ?? {})) as PageSearchParams;
 
   const id = decodeURIComponent(resolvedParams.id ?? "");
   const problem = await getProblemById(id);
