@@ -2,20 +2,38 @@ import { notFound } from "next/navigation";
 import { getProblemById } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import AttemptWorkspace from "@/components/problems/AttemptWorkspace";
 
 export default async function ProblemDetailPage({
   params,
+  searchParams,
 }: Readonly<{
   params: Promise<{ id: string }> | { id: string };
+  searchParams?:
+    | Promise<Record<string, string | string[] | undefined>>
+    | Record<string, string | string[] | undefined>;
 }>) {
   const resolvedParams =
     typeof (params as Promise<{ id: string }>).then === "function"
       ? await (params as Promise<{ id: string }>)
       : (params as { id: string });
+  const resolvedSearchParams =
+    typeof (searchParams as Promise<Record<string, string | string[] | undefined>>)?.then ===
+    "function"
+      ? await (searchParams as Promise<Record<string, string | string[] | undefined>>)
+      : (searchParams ?? {});
 
   const id = decodeURIComponent(resolvedParams.id ?? "");
   const problem = await getProblemById(id);
   if (!problem) notFound();
+  const intent = Array.isArray(resolvedSearchParams.intent)
+    ? resolvedSearchParams.intent[0]
+    : resolvedSearchParams.intent;
+  const audienceRaw = Array.isArray(resolvedSearchParams.audience)
+    ? resolvedSearchParams.audience[0]
+    : resolvedSearchParams.audience;
+  const audience = audienceRaw === "researchers" ? "researchers" : "students";
+  const isAttemptMode = intent === "attempt";
 
   const created =
     problem.created_at && !Number.isNaN(Date.parse(problem.created_at))
@@ -49,6 +67,8 @@ export default async function ProblemDetailPage({
           <div className="text-base leading-7 text-zinc-800">{problem.problem}</div>
         </CardContent>
       </Card>
+
+      {isAttemptMode && <AttemptWorkspace problem={problem} audience={audience} />}
 
       <Card className="border-zinc-200 bg-white">
         <CardHeader>

@@ -9,9 +9,21 @@ import { fadeItem, staggerContainer } from "@/components/ui/motion";
 export default function ProblemList({
   problems,
   loading,
+  onSelect,
+  selectedProblemId,
+  ctaLabel,
+  getProblemHref,
+  secondaryLabel,
+  getSecondaryHref,
 }: {
   problems: Problem[];
   loading: boolean;
+  onSelect?: (problem: Problem) => void;
+  selectedProblemId?: string;
+  ctaLabel?: string;
+  getProblemHref?: (problem: Problem) => string;
+  secondaryLabel?: string;
+  getSecondaryHref?: (problem: Problem) => string | undefined;
 }) {
   if (loading) {
     return (
@@ -45,7 +57,22 @@ export default function ProblemList({
     >
       {problems.map((p) => (
         <motion.div key={p.id} variants={fadeItem}>
-          <ProblemCard problem={p} />
+          <div
+            className={
+              selectedProblemId === p.id
+                ? "rounded-2xl ring-2 ring-emerald-400 ring-offset-2 ring-offset-white"
+                : ""
+            }
+          >
+            <ProblemCard
+              problem={p}
+              onSelect={onSelect}
+              ctaLabel={ctaLabel}
+              href={getProblemHref?.(p)}
+              secondaryLabel={secondaryLabel}
+              secondaryHref={getSecondaryHref?.(p)}
+            />
+          </div>
         </motion.div>
       ))}
     </motion.div>

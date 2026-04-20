@@ -12,11 +12,32 @@ import { RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 
 const LIMIT = 12;
+type Audience = "students" | "researchers";
+
+const roleCopy: Record<
+  Audience,
+  {
+    heading: string;
+    helper: string;
+  }
+> = {
+  students: {
+    heading: "Student practice mode",
+    helper:
+      "Pick a problem, break it down, and practice reasoning with clear step-by-step explanations.",
+  },
+  researchers: {
+    heading: "Research exploration mode",
+    helper:
+      "Pick a problem and push toward hypotheses, assumptions, candidate methods, and limitations.",
+  },
+};
 
 export default function DashboardProblemsClient() {
   const [query, setQuery] = useState("");
   const [field, setField] = useState("");
   const [page, setPage] = useState(1);
+  const [audience, setAudience] = useState<Audience>("students");
 
   const { items, total, totalPages, fields, loading, refresh } =
     useRealtimeProblems({
@@ -49,8 +70,8 @@ export default function DashboardProblemsClient() {
             <Badge variant="secondary">Realtime-ready</Badge>
           </div>
           <p className="mt-2 text-sm text-zinc-600">
-            Browse structured questions. Search, filter, paginate, and receive
-            realtime inserts (Supabase if configured).
+            Browse structured questions and open an attempt page as a student or
+            researcher.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -71,6 +92,35 @@ export default function DashboardProblemsClient() {
               Clear
             </Button>
           )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-zinc-200 bg-white p-2">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button
+            size="sm"
+            variant={audience === "students" ? "default" : "secondary"}
+            onClick={() => setAudience("students")}
+          >
+            Students
+          </Button>
+          <Button
+            size="sm"
+            variant={audience === "researchers" ? "default" : "secondary"}
+            onClick={() => setAudience("researchers")}
+          >
+            Researchers
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="text-sm font-semibold text-zinc-900">
+          {roleCopy[audience].heading}
+        </div>
+        <div className="mt-1 text-sm text-zinc-600">{roleCopy[audience].helper}</div>
+        <div className="mt-2 text-xs text-zinc-500">
+          Clicking &quot;Select to attempt&quot; opens a new page.
         </div>
       </div>
 
@@ -95,7 +145,17 @@ export default function DashboardProblemsClient() {
         <span className="font-semibold text-zinc-900">{total}</span>{" "}
         results
       </motion.div>
-      <ProblemList problems={items} loading={loading} />
+
+      <ProblemList
+        problems={items}
+        loading={loading}
+        ctaLabel="Select to attempt"
+        getProblemHref={(problem) =>
+          `/dashboard/problems/${problem.id}?intent=attempt&audience=${audience}`
+        }
+        secondaryLabel="View problem"
+        getSecondaryHref={(problem) => `/dashboard/problems/${problem.id}`}
+      />
 
       <PaginationControls
         page={page}

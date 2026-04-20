@@ -6,9 +6,27 @@ function getSafeNextPath(nextValue: string | null) {
   return nextValue;
 }
 
+function getPublicOrigin(request: NextRequest) {
+  const configured =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    "";
+  if (configured) return configured.replace(/\/+$/, "");
+
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  if (forwardedHost) {
+    const proto = forwardedProto || "https";
+    return `${proto}://${forwardedHost}`;
+  }
+
+  return request.nextUrl.origin;
+}
+
 export async function GET(request: NextRequest) {
   const nextPath = getSafeNextPath(request.nextUrl.searchParams.get("next"));
-  const loginUrl = new URL("/auth/login", request.url);
+  const publicOrigin = getPublicOrigin(request);
+  const loginUrl = new URL("/auth/login", publicOrigin);
 
   if (!isSupabaseConfigured()) {
     loginUrl.searchParams.set("error", "supabase_not_configured");
@@ -32,5 +50,5 @@ export async function GET(request: NextRequest) {
     loginUrl.searchParams.set("error", "oauth_exchange_failed");
     return NextResponse.redirect(loginUrl);
   }
-  return NextResponse.redirect(new URL(nextPath, request.url));
+  return NextResponse.redirect(new URL(nextPath, publicOrigin));
 }

@@ -11,7 +11,21 @@ function truncate(s: string, max: number) {
   return `${s.slice(0, max - 1)}…`;
 }
 
-export default function ProblemCard({ problem }: { problem: Problem }) {
+export default function ProblemCard({
+  problem,
+  onSelect,
+  ctaLabel = "View details",
+  href,
+  secondaryLabel,
+  secondaryHref,
+}: {
+  problem: Problem;
+  onSelect?: (problem: Problem) => void;
+  ctaLabel?: string;
+  href?: string;
+  secondaryLabel?: string;
+  secondaryHref?: string;
+}) {
   const created = problem.created_at
     ? new Date(problem.created_at).toLocaleDateString(undefined, {
         year: "numeric",
@@ -44,12 +58,25 @@ export default function ProblemCard({ problem }: { problem: Problem }) {
         </div>
       </div>
 
-      <div className="mt-auto p-6 pt-0">
-        <Link href={`/dashboard/problems/${problem.id}`}>
-          <Button size="sm" className="w-full">
-            View details
+      <div className="mt-auto space-y-2 p-6 pt-0">
+        {secondaryHref && secondaryLabel ? (
+          <Link href={secondaryHref}>
+            <Button size="sm" variant="outline" className="w-full">
+              {secondaryLabel}
+            </Button>
+          </Link>
+        ) : null}
+        {onSelect ? (
+          <Button size="sm" className="w-full" onClick={() => onSelect(problem)}>
+            {ctaLabel}
           </Button>
-        </Link>
+        ) : (
+          <Link href={href ?? `/dashboard/problems/${problem.id}`}>
+            <Button size="sm" className="w-full">
+              {ctaLabel}
+            </Button>
+          </Link>
+        )}
       </div>
     </Card>
   );

@@ -10,6 +10,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+function getAppBaseUrl(): string {
+  const configured =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    "";
+  if (configured) return configured.replace(/\/+$/, "");
+  if (typeof window !== "undefined") return window.location.origin;
+  return "http://localhost:3000";
+}
+
 function getErrorMessage(err: unknown): string | null {
   if (err instanceof Error) return err.message;
   if (typeof err === "object" && err !== null) {
@@ -50,7 +60,7 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?next=/dashboard`;
+      const redirectTo = `${getAppBaseUrl()}/auth/callback?next=/dashboard`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo },
@@ -118,7 +128,7 @@ export default function LoginPage() {
 
     setResetLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/reset-password`;
+      const redirectTo = `${getAppBaseUrl()}/auth/reset-password`;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo,
       });
