@@ -5,6 +5,7 @@ import ProblemCard from "@/components/problems/ProblemCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
 import { fadeItem, staggerContainer } from "@/components/ui/motion";
+import { cn } from "@/lib/utils";
 
 export default function ProblemList({
   problems,
@@ -56,13 +57,14 @@ export default function ProblemList({
       animate="show"
     >
       {problems.map((p) => (
-        <motion.div key={p.id} variants={fadeItem}>
+        <motion.div key={p.id} variants={fadeItem} className="h-full">
           <div
-            className={
+            className={cn(
+              "h-full",
               selectedProblemId === p.id
                 ? "rounded-2xl ring-2 ring-emerald-400 ring-offset-2 ring-offset-white"
                 : ""
-            }
+            )}
           >
             <ProblemCard
               problem={p}

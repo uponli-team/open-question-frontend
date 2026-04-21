@@ -35,44 +35,58 @@ export default function ProblemCard({
     : null;
 
   return (
-    <Card className="group flex h-full flex-col overflow-hidden border-zinc-200 bg-white hover:-translate-y-0.5 hover:shadow-lg">
-      <div className="flex items-start justify-between gap-3 p-6">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{problem.field}</Badge>
-            {created && <span className="text-xs text-zinc-500">{created}</span>}
-          </div>
-          <div className="mt-3 text-sm font-semibold text-zinc-950">
+    <Card className="group flex h-full flex-col overflow-hidden border-zinc-200/60 bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/10">
+      <div className="flex flex-1 flex-col p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Badge variant="secondary" className="font-semibold">
+            {problem.field}
+          </Badge>
+          {created && (
+            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+              {created}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4 flex-1">
+          <h3 className="text-base font-bold leading-snug text-zinc-900 group-hover:text-emerald-700 transition-colors">
             {truncate(problem.problem, 140)}
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {problem.keywords.slice(0, 4).map((k) => (
-              <span
-                key={k}
-                className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] text-zinc-700"
-              >
-                {k}
-              </span>
-            ))}
-          </div>
+          </h3>
+
+          {problem.keywords.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {problem.keywords.slice(0, 4).map((k) => (
+                <span
+                  key={k}
+                  className="inline-flex items-center rounded-full bg-emerald-50/50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-100/50"
+                >
+                  {k}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       <div className="mt-auto space-y-2 p-6 pt-0">
         {secondaryHref && secondaryLabel ? (
-          <Link href={secondaryHref}>
-            <Button size="sm" variant="outline" className="w-full">
+          <Link href={secondaryHref} className="block w-full">
+            <Button size="sm" variant="outline" className="w-full font-semibold">
               {secondaryLabel}
             </Button>
           </Link>
         ) : null}
         {onSelect ? (
-          <Button size="sm" className="w-full" onClick={() => onSelect(problem)}>
+          <Button
+            size="sm"
+            className="w-full font-semibold shadow-emerald-200"
+            onClick={() => onSelect(problem)}
+          >
             {ctaLabel}
           </Button>
         ) : (
-          <Link href={href ?? `/dashboard/problems/${problem.id}`}>
-            <Button size="sm" className="w-full">
+          <Link href={href ?? `/dashboard/problems/${problem.id}`} className="block w-full">
+            <Button size="sm" className="w-full font-semibold shadow-emerald-200">
               {ctaLabel}
             </Button>
           </Link>
