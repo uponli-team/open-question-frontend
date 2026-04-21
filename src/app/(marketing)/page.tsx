@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import PaymentModal from "@/components/payment/PaymentModal";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -87,6 +89,18 @@ const leaderboard = [
 ];
 
 export default function MarketingLandingPage() {
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<{
+    name: string;
+    price: string;
+    cadence: string;
+  } | null>(null);
+
+  function openPayment(plan: { name: string; price: string; cadence: string }) {
+    setSelectedPlan(plan);
+    setPaymentOpen(true);
+  }
+
   return (
     <main className="min-h-screen bg-white text-gray-900">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -795,9 +809,28 @@ export default function MarketingLandingPage() {
                       </li>
                     ))}
                   </ul>
-                  <Button className="mt-8 w-full" variant={plan.highlight ? "default" : "outline"}>
-                    {plan.name === "Enterprise" ? "Contact sales" : "Choose plan"}
-                  </Button>
+                  {plan.name === "Enterprise" ? (
+                    <Link href="/#contact">
+                      <Button className="mt-8 w-full" variant="outline">
+                        Contact sales
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Button
+                      id={`choose-plan-${plan.name.toLowerCase()}`}
+                      className="mt-8 w-full"
+                      variant={plan.highlight ? "default" : "outline"}
+                      onClick={() =>
+                        openPayment({
+                          name: plan.name,
+                          price: plan.price,
+                          cadence: plan.cadence,
+                        })
+                      }
+                    >
+                      Choose plan
+                    </Button>
+                  )}
                 </Card>
               </motion.div>
             ))}
@@ -964,6 +997,12 @@ export default function MarketingLandingPage() {
           </Card>
         </FadeInSection>
       </div>
+
+      <PaymentModal
+        isOpen={paymentOpen}
+        onClose={() => setPaymentOpen(false)}
+        plan={selectedPlan}
+      />
     </main>
   );
 }
