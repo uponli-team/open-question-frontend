@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import type { Problem } from "@/types/problem";
 import { Badge } from "@/components/ui/badge";
@@ -26,8 +27,13 @@ export default function ProblemCard({
   secondaryLabel?: string;
   secondaryHref?: string;
 }) {
-  const created = problem.created_at
-    ? new Date(problem.created_at).toLocaleDateString(undefined, {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const created = problem.created_at && mounted
+    ? new Date(problem.created_at).toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
         day: "2-digit",
@@ -79,14 +85,14 @@ export default function ProblemCard({
         {onSelect ? (
           <Button
             size="sm"
-            className="w-full font-semibold shadow-emerald-200"
+            className="w-full font-semibold shadow-sm shadow-emerald-200"
             onClick={() => onSelect(problem)}
           >
             {ctaLabel}
           </Button>
         ) : (
           <Link href={href ?? `/dashboard/problems/${problem.id}`} className="block w-full">
-            <Button size="sm" className="w-full font-semibold shadow-emerald-200">
+            <Button size="sm" className="w-full font-semibold shadow-sm shadow-emerald-200">
               {ctaLabel}
             </Button>
           </Link>
