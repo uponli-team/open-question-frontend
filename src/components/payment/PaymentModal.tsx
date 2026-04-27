@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Lock, CheckCircle2, AlertCircle } from "lucide-react";
+import { X, Lock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { subscribeToPlan } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Plan {
   name: string;
   price: string;
   cadence: string;
+  priceId?: string;
 }
 
 interface PaymentModalProps {
@@ -18,136 +20,43 @@ interface PaymentModalProps {
   plan: Plan | null;
 }
 
-// ─── Google Pay declaration ───────────────────────────────────────────────────
-declare global {
-  interface Window {
-    google?: {
-      payments: {
-        api: {
-          PaymentsClient: new (config: object) => {
-            isReadyToPay: (req: object) => Promise<{ result: boolean }>;
-            createButton: (opts: object) => HTMLElement;
-            loadPaymentData: (req: object) => Promise<object>;
-          };
-        };
-      };
-    };
-  }
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function PaymentModal({ isOpen, onClose, plan }: PaymentModalProps) {
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
-  const [gpayReady, setGpayReady] = useState(false);
-  const gpayContainerRef = useRef<HTMLDivElement>(null);
-  const clientRef = useRef<any>(null);
-  const scriptLoadedRef = useRef(false);
-
-  // ── Google Pay setup ────────────────────────────────────────────────────────
-  const mountGpayButton = useCallback(() => {
-    if (!gpayContainerRef.current || !window.google) return;
-
-    const client = new window.google.payments.api.PaymentsClient({
-      environment: "TEST",
-    });
-    clientRef.current = client;
-
-    const baseRequest = {
-      apiVersion: 2,
-      apiVersionMinor: 0,
-    };
-
-    const allowedPaymentMethods = [
-      {
-        type: "CARD",
-        parameters: {
-          allowedAuthMethods: ["PAN_ONLY", "CRYPTOGRAM_3DS"],
-          allowedCardNetworks: ["AMEX", "DISCOVER", "JCB", "MASTERCARD", "VISA"],
-        },
-        tokenizationSpecification: {
-          type: "PAYMENT_GATEWAY",
-          parameters: {
-            gateway: "example",
-            gatewayMerchantId: "exampleGatewayMerchantId",
-          },
-        },
-      },
-    ];
-
-    client
-      .isReadyToPay({ ...baseRequest, allowedPaymentMethods })
-      .then(({ result }) => {
-        if (!result) return;
-        setGpayReady(true);
-
-        // Clear previous button if any
-        if (gpayContainerRef.current) {
-          gpayContainerRef.current.innerHTML = "";
-        }
-
-        const button = client.createButton({
-          buttonColor: "black",
-          buttonType: "subscribe",
-          buttonSizeMode: "fill",
-          onClick: () => {
-            const paymentDataRequest = {
-              ...baseRequest,
-              allowedPaymentMethods,
-              merchantInfo: {
-                merchantId: "BCR2DN4TR2LLLLLL",
-                merchantName: "OQD",
-              },
-              transactionInfo: {
-                totalPriceStatus: "FINAL",
-                totalPriceLabel: "Subscription",
-                totalPrice: plan?.price?.replace("$", "") ?? "29",
-                currencyCode: "USD",
-                countryCode: "US",
-              },
-            };
-
-            client
-              .loadPaymentData(paymentDataRequest)
-              .then(() => {
-                setStatus("success");
-              })
-              .catch((err: { statusCode?: string }) => {
-                if (err.statusCode !== "CANCELED") setStatus("error");
-              });
-          },
-        });
-
-        gpayContainerRef.current?.appendChild(button);
-      })
-      .catch(() => {
-        // GPay not available
-      });
-  }, [plan]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    if (window.google) {
-      mountGpayButton();
-      return;
-    }
-
-    if (scriptLoadedRef.current) return;
-    scriptLoadedRef.current = true;
-
-    const script = document.createElement("script");
-    script.src = "https://pay.google.com/gp/p/js/pay.js";
-    script.async = true;
-    script.onload = mountGpayButton;
-    document.body.appendChild(script);
-  }, [isOpen, mountGpayButton]);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Reset on close
   useEffect(() => {
     if (!isOpen) {
       setStatus("idle");
+      setLoading(false);
+      setErrorMsg(null);
     }
   }, [isOpen]);
+
+  const handleSubscribe = async () => {
+    if (!plan?.priceId) return;
+
+    if (plan.priceId === "free") {
+      setStatus("success");
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const { url } = await subscribeToPlan(plan.priceId);
+      // Redirect to Stripe checkout
+      window.location.href = url;
+    } catch (err: any) {
+      console.error("Subscription error:", err);
+      setErrorMsg(err.message || "Failed to start subscription. Please ensure you are signed in.");
+      setStatus("error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const priceNum =
     plan?.price && plan.price !== "Custom" ? plan.price : null;
@@ -214,7 +123,7 @@ export default function PaymentModal({ isOpen, onClose, plan }: PaymentModalProp
                   •••• •••• •••• ••••
                 </div>
                 <div className="mt-1.5 flex justify-between text-xs text-white/60">
-                  <span>SECURE CHECKOUT</span>
+                  <span>SECURE STRIPE CHECKOUT</span>
                   <span></span>
                 </div>
               </div>
@@ -231,9 +140,9 @@ export default function PaymentModal({ isOpen, onClose, plan }: PaymentModalProp
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
                     <CheckCircle2 className="h-9 w-9 text-emerald-600" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900">Payment successful!</h3>
+                  <h3 className="text-xl font-bold text-gray-900">Subscription Active!</h3>
                   <p className="text-sm text-gray-500">
-                    Welcome to <span className="font-semibold text-emerald-700">{plan?.name}</span>. A receipt has been sent to your email.
+                    Welcome to <span className="font-semibold text-emerald-700">{plan?.name}</span>. You now have full access to all features.
                   </p>
                   <Button
                     className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700"
@@ -252,7 +161,7 @@ export default function PaymentModal({ isOpen, onClose, plan }: PaymentModalProp
                     <AlertCircle className="h-8 w-8 text-red-500" />
                   </div>
                   <h3 className="text-lg font-bold text-gray-900">Payment failed</h3>
-                  <p className="text-sm text-gray-500">Something went wrong. Please try again.</p>
+                  <p className="text-sm text-gray-500">{errorMsg || "Something went wrong. Please try again."}</p>
                   <Button
                     variant="outline"
                     className="mt-2 w-full"
@@ -264,27 +173,31 @@ export default function PaymentModal({ isOpen, onClose, plan }: PaymentModalProp
               ) : (
                 <div className="space-y-4 pt-2 pb-6">
                   <div className="text-center">
-                    <h3 className="text-lg font-semibold text-gray-900">Checkout</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Secure Checkout</h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      Fast, secure checkout with your Google account.
+                      You will be redirected to Stripe to complete your payment securely.
                     </p>
                   </div>
 
-                  {/* Google Pay button rendered by the API */}
-                  <div
-                    id="google-pay-container"
-                    ref={gpayContainerRef}
-                    className="flex justify-center min-h-[48px] w-full [&>button]:!w-full [&>button]:!rounded-xl mt-4"
-                  />
+                  <Button
+                    className="mt-4 w-full bg-emerald-600 py-6 text-lg font-bold hover:bg-emerald-700"
+                    onClick={handleSubscribe}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      "Subscribe Now"
+                    )}
+                  </Button>
 
-                  {!gpayReady && (
-                    <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 py-3 text-sm text-gray-400">
-                      <svg viewBox="0 0 20 20" className="h-4 w-4 animate-spin" aria-hidden>
-                        <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2" fill="none" strokeDasharray="25 50" />
-                      </svg>
-                      Checking Google Pay availability…
-                    </div>
-                  )}
+                  <p className="text-center text-[11px] text-gray-400">
+                    By subscribing, you agree to our Terms of Service and Privacy Policy.
+                    Payments are handled securely via Stripe.
+                  </p>
                 </div>
               )}
 

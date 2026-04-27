@@ -13,6 +13,7 @@ import type { Session, User } from "@supabase/supabase-js";
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [audience, setAudience] = useState<"students" | "researchers">("students");
   const router = useRouter();
   const pathname = usePathname();
   const accountRef = useRef<HTMLDivElement | null>(null);
@@ -20,6 +21,7 @@ export default function Navbar() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [user, setUser] = useState<User | null>(null);
   const [canAccessAdmin, setCanAccessAdmin] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string>("inactive");
   const displayName =
     user?.user_metadata?.full_name ??
     user?.user_metadata?.name ??
@@ -59,6 +61,19 @@ export default function Navbar() {
   }, [supabase]);
 
   useEffect(() => {
+    const saved = localStorage.getItem("oqd_audience");
+    if (saved === "students" || saved === "researchers") {
+      setAudience(saved);
+    }
+  }, []);
+
+  function toggleAudience(val: "students" | "researchers") {
+    setAudience(val);
+    localStorage.setItem("oqd_audience", val);
+    window.dispatchEvent(new Event("storage")); // Trigger sync
+  }
+
+  useEffect(() => {
     let active = true;
     async function loadProfileRole() {
       if (!user) {
@@ -69,9 +84,13 @@ export default function Navbar() {
         const profile = await getUserProfileById(user.id);
         if (active) {
           setCanAccessAdmin(hasAdminAccess(profile?.role));
+          setSubscriptionStatus(profile?.subscription_status ?? "inactive");
         }
       } catch {
-        if (active) setCanAccessAdmin(false);
+        if (active) {
+          setCanAccessAdmin(false);
+          setSubscriptionStatus("inactive");
+        }
       }
     }
     void loadProfileRole();
@@ -197,7 +216,14 @@ export default function Navbar() {
               {accountOpen && (
                 <div className="absolute right-0 top-12 z-50 w-56 rounded-2xl border border-zinc-200 bg-white p-2 shadow-lg">
                   <div className="border-b border-zinc-100 px-3 py-2">
-                    <p className="text-sm font-semibold text-zinc-900">{displayName}</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-zinc-900">{displayName}</p>
+                      {subscriptionStatus === "active" && (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 ring-1 ring-amber-200">
+                          PRO
+                        </span>
+                      )}
+                    </div>
                     <p className="truncate text-xs text-zinc-500">{user.email}</p>
                   </div>
                   <div className="mt-2 space-y-1">
@@ -224,6 +250,35 @@ export default function Navbar() {
                         Admin
                       </Link>
                     )}
+                    <div className="border-t border-zinc-100 p-2">
+                      <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                        View Mode
+                      </p>
+                      <div className="grid grid-cols-2 gap-1 px-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleAudience("students")}
+                          className={`rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                            audience === "students"
+                              ? "bg-emerald-600 text-white shadow-sm"
+                              : "text-zinc-600 hover:bg-zinc-50"
+                          }`}
+                        >
+                          Students
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleAudience("researchers")}
+                          className={`rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                            audience === "researchers"
+                              ? "bg-emerald-600 text-white shadow-sm"
+                              : "text-zinc-600 hover:bg-zinc-50"
+                          }`}
+                        >
+                          Researchers
+                        </button>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
@@ -310,8 +365,15 @@ export default function Navbar() {
                   <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-white text-sm font-semibold text-zinc-900">
                     {initial}
                   </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-900">{displayName}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <p className="truncate text-sm font-semibold text-zinc-900">{displayName}</p>
+                      {subscriptionStatus === "active" && (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 ring-1 ring-amber-200">
+                          PRO
+                        </span>
+                      )}
+                    </div>
                     <p className="truncate text-xs text-zinc-500">{user.email}</p>
                   </div>
                 </div>

@@ -94,9 +94,15 @@ export default function MarketingLandingPage() {
     name: string;
     price: string;
     cadence: string;
+    priceId?: string;
   } | null>(null);
 
-  function openPayment(plan: { name: string; price: string; cadence: string }) {
+  function openPayment(plan: {
+    name: string;
+    price: string;
+    cadence: string;
+    priceId?: string;
+  }) {
     setSelectedPlan(plan);
     setPaymentOpen(true);
   }
@@ -743,6 +749,7 @@ export default function MarketingLandingPage() {
                 name: "Starter",
                 price: "$0",
                 cadence: "forever free",
+                priceId: "free",
                 features: [
                   "Mock dataset access",
                   "Dashboard + detail views",
@@ -755,6 +762,7 @@ export default function MarketingLandingPage() {
                 name: "Pro",
                 price: "$29",
                 cadence: "per seat / month",
+                priceId: "price_1TObTsQmj8nBl4a0cBZZn9ee",
                 features: [
                   "Everything in Starter",
                   "Realtime Supabase sync",
@@ -825,6 +833,7 @@ export default function MarketingLandingPage() {
                           name: plan.name,
                           price: plan.price,
                           cadence: plan.cadence,
+                          priceId: plan.priceId,
                         })
                       }
                     >

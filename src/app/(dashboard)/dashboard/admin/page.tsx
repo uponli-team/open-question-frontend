@@ -532,64 +532,75 @@ export default function AdminPage() {
 
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-zinc-100 text-zinc-700">
-                  <tr>
-                    <th className="px-3 py-2">ID</th>
-                    <th className="px-3 py-2">Email</th>
-                    <th className="px-3 py-2">Role</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Action</th>
-                    <th className="px-3 py-2">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {userRows
-                    .filter((u) => {
-                      const q = userSearch.trim().toLowerCase();
-                      if (!q) return true;
-                      return (
-                        u.email.toLowerCase().includes(q) ||
-                        u.id.toLowerCase().includes(q)
-                      );
-                    })
-                    .map((u) => (
-                    <tr key={u.id} className="border-t border-zinc-100">
-                      <td className="px-3 py-2 font-medium text-zinc-900">{u.id.slice(0, 8)}…</td>
-                      <td className="px-3 py-2 text-zinc-600">{u.email}</td>
-                      <td className="px-3 py-2">
-                        <select
-                          value={u.role}
-                          onChange={(e) => void onUpdateUserRole(u.id, normalizeRoleValue(e.target.value))}
-                          className="rounded-md border border-zinc-200 px-2 py-1 text-sm"
-                        >
-                          <option value="owner">Owner</option>
-                          <option value="superadmin">Super Admin</option>
-                          <option value="admin">Admin</option>
-                          <option value="editor">Editor</option>
-                          <option value="reviewer">Reviewer</option>
-                          <option value="user">User</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                            (u.is_active ?? true)
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-zinc-200 text-zinc-700"
-                          }`}
-                        >
-                          {(u.is_active ?? true) ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void onToggleUserStatus(u)}
-                        >
-                          {(u.is_active ?? true) ? "Deactivate" : "Activate"}
-                        </Button>
-                      </td>
+                    <thead className="bg-zinc-100 text-zinc-700">
+                      <tr>
+                        <th className="px-3 py-2">ID</th>
+                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Role</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Subscription</th>
+                        <th className="px-3 py-2">Action</th>
+                        <th className="px-3 py-2">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userRows
+                        .filter((u) => {
+                          const q = userSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            u.email.toLowerCase().includes(q) ||
+                            u.id.toLowerCase().includes(q)
+                          );
+                        })
+                        .map((u) => (
+                        <tr key={u.id} className="border-t border-zinc-100">
+                          <td className="px-3 py-2 font-medium text-zinc-900">{u.id.slice(0, 8)}…</td>
+                          <td className="px-3 py-2 text-zinc-600">{u.email}</td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={u.role}
+                              onChange={(e) => void onUpdateUserRole(u.id, normalizeRoleValue(e.target.value))}
+                              className="rounded-md border border-zinc-200 px-2 py-1 text-sm"
+                            >
+                              <option value="owner">Owner</option>
+                              <option value="superadmin">Super Admin</option>
+                              <option value="admin">Admin</option>
+                              <option value="editor">Editor</option>
+                              <option value="reviewer">Reviewer</option>
+                              <option value="user">User</option>
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                                (u.is_active ?? true)
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-zinc-200 text-zinc-700"
+                              }`}
+                            >
+                              {(u.is_active ?? true) ? "Active" : "Inactive"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {u.subscription_status === "active" ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700 shadow-sm ring-1 ring-amber-200">
+                                <ShieldCheck className="h-3 w-3" />
+                                PRO
+                              </span>
+                            ) : (
+                              <span className="text-xs text-zinc-400">Free</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void onToggleUserStatus(u)}
+                            >
+                              {(u.is_active ?? true) ? "Deactivate" : "Activate"}
+                            </Button>
+                          </td>
                       <td className="px-3 py-2 text-zinc-600">
                         {u.created_at ? new Date(u.created_at).toLocaleDateString() : "-"}
                       </td>

@@ -45,6 +45,7 @@ export type AdminUserProfile = {
   email: string;
   role: string;
   is_active?: boolean;
+  subscription_status?: string;
   created_at?: string;
 };
 
@@ -69,6 +70,8 @@ function hasAdminAccess(role: unknown): boolean {
 function mapAdminUserProfile(item: AdminUserProfile): AdminUserProfile {
   const rawStatus = String((item as { status?: unknown }).status ?? "").toLowerCase();
   const rawActive = (item as { active?: unknown }).active;
+  const rawSub = String((item as { subscription_status?: unknown }).subscription_status ?? "").toLowerCase();
+
   return {
     ...item,
     role: normalizeRoleValue(item.role || "user") || "user",
@@ -80,6 +83,7 @@ function mapAdminUserProfile(item: AdminUserProfile): AdminUserProfile {
           : rawStatus
             ? rawStatus === "active" || rawStatus === "enabled"
             : true,
+    subscription_status: item.subscription_status || rawSub || "inactive",
   };
 }
 
@@ -597,22 +601,29 @@ export async function getUserProfileById(
 
 export async function getAdminOverview(): Promise<AdminOverview> {
   const [papers, openQuestions, userProfiles] = await Promise.all([
-    backendRequest<{ count?: number }>({ path: "/api/papers", method: "GET" }),
-    backendRequest<{ count?: number }>({
+    backendRequest<{ count?: number; total?: number; results?: unknown[] }>({ path: "/api/papers", method: "GET" }),
+    backendRequest<{ count?: number; total?: number; results?: unknown[] }>({
       path: "/api/open_questions",
       method: "GET",
     }),
-    backendRequest<{ count?: number }>({
+    backendRequest<{ count?: number; total?: number; results?: unknown[] }>({
       path: "/api/user_profiles",
       method: "GET",
       requireAuth: true,
     }).catch(() => ({ count: 0 })),
   ]);
 
+  const getCount = (data: { count?: number; total?: number; results?: unknown[] }) => {
+    if (typeof data.count === "number") return data.count;
+    if (typeof data.total === "number") return data.total;
+    if (Array.isArray(data.results)) return data.results.length;
+    return 0;
+  };
+
   return {
-    papers: Number(papers.count ?? 0),
-    openQuestions: Number(openQuestions.count ?? 0),
-    userProfiles: Number(userProfiles.count ?? 0),
+    papers: getCount(papers),
+    openQuestions: getCount(openQuestions),
+    userProfiles: getCount(userProfiles),
   };
 }
 
@@ -749,5 +760,24 @@ export async function deleteProblem(id: string) {
   throw lastError instanceof Error
     ? lastError
     : new Error("Failed to delete problem.");
+}
+
+export async function analyzeResearch(q: string, focus?: string): Promise<{ result: string }> {
+  const qs = new URLSearchParams({ q });
+  if (focus) qs.append("focus", focus);
+  return backendRequest<{ result: string }>({
+    path: `/api/analyze?${qs.toString()}`,
+    method: "GET",
+    requireAuth: true,
+  });
+}
+
+export async function subscribeToPlan(priceId: string): Promise<{ url: string }> {
+  return backendRequest<{ url: string }>({
+    path: "/api/payments/subscribe",
+    method: "POST",
+    body: { priceId },
+    requireAuth: true,
+  });
 }
 
