@@ -48,7 +48,7 @@ export default function AIResearchSynthesis() {
     setLoading(true);
     setResult(null);
     try {
-      const data = await analyzeResearch(query.trim(), focus.trim() || undefined);
+      const data = (await analyzeResearch(query.trim(), focus.trim() || undefined)) as any;
       
       // Aggressive extraction: try to find 'analysis' or 'result' in the data object
       let synthesisResult = 
@@ -151,7 +151,9 @@ export default function AIResearchSynthesis() {
           <div className="space-y-2">
             <label className="text-sm font-semibold text-zinc-700 flex items-center gap-2">
               Research Query
-              <Info className="h-3 w-3 text-zinc-400" title="What would you like the AI to analyze?" />
+              <span title="What would you like the AI to analyze?">
+                <Info className="h-3 w-3 text-zinc-400 cursor-help" />
+              </span>
             </label>
             <textarea
               id="synthesis-query"
@@ -240,12 +242,11 @@ export default function AIResearchSynthesis() {
                             const cleanLine = line.trim();
                             if (!cleanLine) return null;
                             
-                            // Split by colon to bold the title
-                            const parts = cleanLine.split(":");
                             const listMarker = cleanLine.match(/^\d+\.\s/)?.[0] || "";
                             const contentWithoutMarker = cleanLine.replace(/^\d+\.\s/, "");
-                            const [title, ...rest] = contentWithoutMarker.split(":");
-                            const description = rest.join(":");
+                            const lineParts = contentWithoutMarker.split(":");
+                            const title = lineParts[0] || "";
+                            const description = lineParts.slice(1).join(":");
 
                             return (
                               <li key={j} className="flex gap-4 items-start bg-white/50 p-4 rounded-2xl border border-emerald-100/50 shadow-sm transition-all hover:shadow-md">
