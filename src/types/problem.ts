@@ -6,4 +6,6 @@ export interface Problem {
   created_at?: string;
   extracted_text?: string;
   structured_summary?: string;
+  is_premium?: boolean;
+  requires_subscription?: boolean;
 }

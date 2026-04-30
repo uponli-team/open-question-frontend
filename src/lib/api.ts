@@ -38,6 +38,8 @@ type BackendOpenQuestion = {
   unsolved_indicators?: unknown;
   croissant_metadata?: unknown;
   created_at?: string | null;
+  is_premium?: boolean;
+  requires_subscription?: boolean;
 };
 
 export type AdminUserProfile = {
@@ -717,7 +719,7 @@ export async function getAdminOverview(): Promise<AdminOverview> {
   return {
     papers: getCount(papers, 5000), // Assuming ~5k papers
     openQuestions: getCount(openQuestions, 114200),
-    userProfiles: getCount(userProfiles, userProfiles.results?.length ?? 0), // Users are usually fully returned
+    userProfiles: getCount(userProfiles, 'results' in userProfiles && Array.isArray(userProfiles.results) ? userProfiles.results.length : 0), // Users are usually fully returned
   };
 }
 
