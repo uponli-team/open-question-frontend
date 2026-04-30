@@ -258,22 +258,20 @@ export default function Navbar() {
                         <button
                           type="button"
                           onClick={() => toggleAudience("students")}
-                          className={`rounded-lg px-2 py-1.5 text-xs font-medium transition ${
-                            audience === "students"
+                          className={`rounded-lg px-2 py-1.5 text-xs font-medium transition ${audience === "students"
                               ? "bg-emerald-600 text-white shadow-sm"
                               : "text-zinc-600 hover:bg-zinc-50"
-                          }`}
+                            }`}
                         >
                           Students
                         </button>
                         <button
                           type="button"
                           onClick={() => toggleAudience("researchers")}
-                          className={`rounded-lg px-2 py-1.5 text-xs font-medium transition ${
-                            audience === "researchers"
+                          className={`rounded-lg px-2 py-1.5 text-xs font-medium transition ${audience === "researchers"
                               ? "bg-emerald-600 text-white shadow-sm"
                               : "text-zinc-600 hover:bg-zinc-50"
-                          }`}
+                            }`}
                         >
                           Researchers
                         </button>

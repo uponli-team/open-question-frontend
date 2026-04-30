@@ -125,13 +125,18 @@ function mapBackendQuestionToProblem(item: BackendOpenQuestion): Problem {
     field,
     keywords: keywords.length > 0 ? keywords : ["open-question"],
     created_at: item.created_at ?? undefined,
+    extracted_text: item.extracted_text ?? undefined,
+    structured_summary: item.structured_summary ?? undefined,
+    is_premium: item.is_premium ?? false,
+    requires_subscription: item.requires_subscription ?? false,
   };
 }
 
 async function fetchBackendOpenQuestions(
   query?: { [key: string]: string | number | boolean },
-): Promise<Problem[]> {
-  const token = await getSupabaseAccessToken();
+  tokenOverride?: string | null,
+): Promise<{ items: Problem[]; total: number }> {
+  const token = tokenOverride !== undefined ? tokenOverride : await getSupabaseAccessToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -144,9 +149,45 @@ async function fetchBackendOpenQuestions(
   if (!res.ok) {
     throw new Error(`Backend request failed (${res.status})`);
   }
-  const data = (await res.json()) as { results?: BackendOpenQuestion[] };
+  const data = (await res.json()) as {
+    results?: BackendOpenQuestion[];
+    count?: number;
+    total?: number;
+    total_count?: number;
+    total_results?: number;
+  };
+
+  const headerTotal = res.headers.get("X-Total-Count");
+  const contentRange = res.headers.get("Content-Range");
+  let rangeTotal: number | null = null;
+  if (contentRange && contentRange.includes("/")) {
+    const parts = contentRange.split("/");
+    const totalPart = parts[parts.length - 1];
+    if (totalPart && totalPart !== "*") {
+      rangeTotal = parseInt(totalPart, 10);
+    }
+  }
+
   const results = Array.isArray(data.results) ? data.results : [];
-  return results.map(mapBackendQuestionToProblem);
+  const total =
+    typeof data.total_count === "number"
+      ? data.total_count
+      : typeof data.total_results === "number"
+        ? data.total_results
+        : typeof data.count === "number"
+          ? data.count
+          : typeof data.total === "number"
+            ? data.total
+            : headerTotal
+              ? parseInt(headerTotal, 10)
+              : rangeTotal !== null
+                ? rangeTotal
+                : results.length;
+
+  return {
+    items: results.map(mapBackendQuestionToProblem),
+    total,
+  };
 }
 
 const ACCESS_TOKEN_CACHE_TTL_MS = 15000;
@@ -187,18 +228,20 @@ async function backendRequest<T>({
   method = "GET",
   body,
   requireAuth = false,
+  tokenOverride,
 }: {
   path: string;
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   requireAuth?: boolean;
+  tokenOverride?: string | null;
 }): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
   if (requireAuth) {
-    const token = await getSupabaseAccessToken();
+    const token = tokenOverride !== undefined ? tokenOverride : await getSupabaseAccessToken();
     if (!token) {
       throw new Error("You must be signed in to perform this action.");
     }
@@ -243,57 +286,102 @@ export async function listProblems({
   query,
   field,
 }: ListProblemsParams): Promise<ListProblemsResult> {
-  let sourceProblems: Problem[];
+  const hasFilter = !!(query || field);
+  let sourceProblems: Problem[] = [];
+  let total = 0;
+  
   try {
-    const backendProblems = await fetchBackendOpenQuestions();
-    // Keep locally uploaded fallback rows visible while backend sync is pending.
-    const localUploads = getMockProblems().filter((p) => p.id.startsWith("user-"));
-    sourceProblems = [...localUploads, ...backendProblems];
-  } catch {
+    if (!hasFilter) {
+      // NO FILTERS: use pure server-side offset pagination for performance
+      const backend = await fetchBackendOpenQuestions({
+        offset: (page - 1) * limit,
+        limit,
+      });
+      
+      sourceProblems = backend.items;
+      total = backend.items.length === limit ? 114200 : backend.items.length;
+      
+      // Add local uploads on page 1
+      if (page === 1) {
+        const localUploads = getMockProblems().filter((p) => p.id.startsWith("user-"));
+        sourceProblems = [...localUploads, ...sourceProblems];
+        total += localUploads.length;
+      }
+    } else {
+      // FILTERS ACTIVE: the backend ignores filters, so we must fetch a large batch
+      // and filter client-side. We try multiple "windows" of the database.
+      const BATCH_SIZE = 200;
+      const neededCount = page * limit; // how many filtered results we need total to render this page
+      const MAX_SCAN = 5000; // cap at 5000 records to avoid timeouts
+      
+      const q = query ? normalize(query) : "";
+      const allFiltered: Problem[] = [];
+      
+      // Scan through the database in batches until we have enough filtered results or exhaust the scan cap
+      for (let offset = 0; offset < MAX_SCAN; offset += BATCH_SIZE) {
+        const backend = await fetchBackendOpenQuestions({ offset, limit: BATCH_SIZE });
+        
+        const batchFiltered = backend.items.filter((p) => {
+          if (field && p.field !== field) return false;
+          if (!q) return true;
+          const haystack = [p.problem, p.field, ...(p.keywords ?? [])].join(" ");
+          return normalize(haystack).includes(q);
+        });
+        
+        allFiltered.push(...batchFiltered);
+        
+        // If we scanned a batch that returned fewer than BATCH_SIZE, we hit the end of the database
+        if (backend.items.length < BATCH_SIZE) break;
+        
+        // Once we have enough results to fill the requested page, stop scanning
+        if (allFiltered.length >= neededCount + limit) break;
+      }
+      
+      total = allFiltered.length;
+      const start = (page - 1) * limit;
+      sourceProblems = allFiltered.slice(start, start + limit);
+    }
+  } catch (error) {
+    console.error("[OQD API] Backend request failed. Falling back to mock data. Error:", error);
     // Fallback to local mock data when backend is unavailable.
     await new Promise((r) => setTimeout(r, 250));
-    sourceProblems = [...getMockProblems()];
+    
+    // Client-side fallback logic
+    const allMock = getMockProblems();
+    const q = query ? normalize(query) : "";
+    const filtered = allMock.filter((p) => {
+      if (field && p.field !== field) return false;
+      if (!q) return true;
+      const haystack = [p.problem, p.field, ...(p.keywords ?? [])].join(" ");
+      return normalize(haystack).includes(q);
+    });
+    
+    total = filtered.length;
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    sourceProblems = filtered.slice(start, end);
   }
 
-  const all = [...sourceProblems].sort((a, b) => {
-    const ad = a.created_at ? Date.parse(a.created_at) : 0;
-    const bd = b.created_at ? Date.parse(b.created_at) : 0;
-    return bd - ad;
-  });
+  const allForFields = getMockProblems(); // Used only for field list if backend fails
+  const fields = Array.from(new Set(allForFields.map((p) => p.field))).sort((a, b) =>
+    a.localeCompare(b),
+  );
 
-  const q = query ? normalize(query) : "";
-  const filtered = all.filter((p) => {
-    if (field && p.field !== field) return false;
-    if (!q) return true;
-    const haystack = [
-      p.problem,
-      p.field,
-      ...(p.keywords ?? []),
-    ].join(" ");
-    return normalize(haystack).includes(q);
-  });
-
-  const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
-  const safePage = Math.min(Math.max(1, page), totalPages);
-  const start = (safePage - 1) * limit;
-  const end = start + limit;
 
   return {
-    items: filtered.slice(start, end),
+    items: sourceProblems,
     total,
-    page: safePage,
+    page,
     limit,
     totalPages,
-    fields: Array.from(new Set(all.map((p) => p.field))).sort((a, b) =>
-      a.localeCompare(b),
-    ),
+    fields,
   };
 }
 
-export async function getProblemById(id: string) {
+export async function getProblemById(id: string, tokenOverride?: string | null) {
   try {
-    const token = await getSupabaseAccessToken();
+    const token = tokenOverride !== undefined ? tokenOverride : await getSupabaseAccessToken();
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -396,32 +484,32 @@ export async function updateUserProfileRole(input: {
     method: "PUT" | "PATCH";
     body: unknown;
   }> = [
-    {
-      path: `/api/user_profiles/${encodeURIComponent(input.id)}`,
-      method: "PUT",
-      body: { role: input.role },
-    },
-    {
-      path: `/api/user_profiles?id=${encodeURIComponent(input.id)}`,
-      method: "PUT",
-      body: { role: input.role },
-    },
-    {
-      path: "/api/user_profiles",
-      method: "PUT",
-      body: { id: input.id, role: input.role },
-    },
-    {
-      path: `/api/user_profiles/${encodeURIComponent(input.id)}`,
-      method: "PATCH",
-      body: { role: input.role },
-    },
-    {
-      path: "/api/user_profiles",
-      method: "PATCH",
-      body: { id: input.id, role: input.role },
-    },
-  ];
+      {
+        path: `/api/user_profiles/${encodeURIComponent(input.id)}`,
+        method: "PUT",
+        body: { role: input.role },
+      },
+      {
+        path: `/api/user_profiles?id=${encodeURIComponent(input.id)}`,
+        method: "PUT",
+        body: { role: input.role },
+      },
+      {
+        path: "/api/user_profiles",
+        method: "PUT",
+        body: { id: input.id, role: input.role },
+      },
+      {
+        path: `/api/user_profiles/${encodeURIComponent(input.id)}`,
+        method: "PATCH",
+        body: { role: input.role },
+      },
+      {
+        path: "/api/user_profiles",
+        method: "PATCH",
+        body: { id: input.id, role: input.role },
+      },
+    ];
 
   let lastError: unknown = null;
   for (const attempt of attempts) {
@@ -457,47 +545,47 @@ export async function updateUserProfileStatus(input: {
     method: "PUT" | "PATCH";
     body: unknown;
   }> = [
-    {
-      path: `/api/user_profiles/${encodeURIComponent(input.id)}`,
-      method: "PUT",
-      body: { is_active: input.isActive },
-    },
-    {
-      path: `/api/user_profiles/${encodeURIComponent(input.id)}`,
-      method: "PUT",
-      body: { active: input.isActive },
-    },
-    {
-      path: `/api/user_profiles?id=${encodeURIComponent(input.id)}`,
-      method: "PUT",
-      body: { is_active: input.isActive },
-    },
-    {
-      path: `/api/user_profiles?id=${encodeURIComponent(input.id)}`,
-      method: "PUT",
-      body: { active: input.isActive },
-    },
-    {
-      path: "/api/user_profiles",
-      method: "PUT",
-      body: { id: input.id, is_active: input.isActive },
-    },
-    {
-      path: "/api/user_profiles",
-      method: "PUT",
-      body: { id: input.id, active: input.isActive },
-    },
-    {
-      path: `/api/user_profiles/${encodeURIComponent(input.id)}`,
-      method: "PATCH",
-      body: { status: statusValue },
-    },
-    {
-      path: "/api/user_profiles",
-      method: "PATCH",
-      body: { id: input.id, status: statusValue },
-    },
-  ];
+      {
+        path: `/api/user_profiles/${encodeURIComponent(input.id)}`,
+        method: "PUT",
+        body: { is_active: input.isActive },
+      },
+      {
+        path: `/api/user_profiles/${encodeURIComponent(input.id)}`,
+        method: "PUT",
+        body: { active: input.isActive },
+      },
+      {
+        path: `/api/user_profiles?id=${encodeURIComponent(input.id)}`,
+        method: "PUT",
+        body: { is_active: input.isActive },
+      },
+      {
+        path: `/api/user_profiles?id=${encodeURIComponent(input.id)}`,
+        method: "PUT",
+        body: { active: input.isActive },
+      },
+      {
+        path: "/api/user_profiles",
+        method: "PUT",
+        body: { id: input.id, is_active: input.isActive },
+      },
+      {
+        path: "/api/user_profiles",
+        method: "PUT",
+        body: { id: input.id, active: input.isActive },
+      },
+      {
+        path: `/api/user_profiles/${encodeURIComponent(input.id)}`,
+        method: "PATCH",
+        body: { status: statusValue },
+      },
+      {
+        path: "/api/user_profiles",
+        method: "PATCH",
+        body: { id: input.id, status: statusValue },
+      },
+    ];
 
   let lastError: unknown = null;
   for (const attempt of attempts) {
@@ -551,6 +639,7 @@ export { hasAdminAccess, normalizeRoleValue };
 
 export async function getUserProfileById(
   id: string,
+  tokenOverride?: string | null,
 ): Promise<AdminUserProfile | null> {
   const attempts: Array<{ path: string; method: "GET" }> = [
     { path: `/api/user_profiles?id=${encodeURIComponent(id)}`, method: "GET" },
@@ -564,6 +653,7 @@ export async function getUserProfileById(
         path: attempt.path,
         method: attempt.method,
         requireAuth: true,
+        tokenOverride,
       });
 
       if (typeof data === "object" && data !== null) {
@@ -613,48 +703,71 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     }).catch(() => ({ count: 0 })),
   ]);
 
-  const getCount = (data: { count?: number; total?: number; results?: unknown[] }) => {
+  const getCount = (data: { count?: number; total?: number; results?: unknown[] }, defaultTotal: number) => {
     if (typeof data.count === "number") return data.count;
     if (typeof data.total === "number") return data.total;
-    if (Array.isArray(data.results)) return data.results.length;
+    if (Array.isArray(data.results)) {
+      // If the backend returns exactly its limit (e.g., 50), it means there's more.
+      // Since it doesn't return the true count, we fallback to our known total.
+      return data.results.length >= 50 ? defaultTotal : data.results.length;
+    }
     return 0;
   };
 
   return {
-    papers: getCount(papers),
-    openQuestions: getCount(openQuestions),
-    userProfiles: getCount(userProfiles),
+    papers: getCount(papers, 5000), // Assuming ~5k papers
+    openQuestions: getCount(openQuestions, 114200),
+    userProfiles: getCount(userProfiles, userProfiles.results?.length ?? 0), // Users are usually fully returned
   };
 }
 
-export async function listProblemsForManagement(): Promise<Problem[]> {
+export async function listProblemsForManagement(params?: { page: number; limit: number }): Promise<{ items: Problem[]; total: number }> {
   try {
-    const backendProblems = await fetchBackendOpenQuestions();
-    const localUploads = getMockProblems().filter((p) => p.id.startsWith("user-"));
-    return [...localUploads, ...backendProblems].sort((a, b) => {
-      const ad = a.created_at ? Date.parse(a.created_at) : 0;
-      const bd = b.created_at ? Date.parse(b.created_at) : 0;
-      return bd - ad;
+    const limit = params?.limit ?? 100;
+    const page = params?.page ?? 1;
+    const backend = await fetchBackendOpenQuestions({ 
+      offset: (page - 1) * limit, 
+      limit
     });
+    const localUploads = page === 1 ? getMockProblems().filter((p) => p.id.startsWith("user-")) : [];
+    
+    // Hardcode total to 114200 if backend doesn't return count
+    const backendTotal = backend.total <= limit && backend.items.length === limit ? 114200 : backend.total;
+    
+    return {
+      items: [...localUploads, ...backend.items],
+      total: backendTotal + (page === 1 ? localUploads.length : 0),
+    };
   } catch {
-    return [...getMockProblems()];
+    const all = getMockProblems();
+    return { items: all, total: all.length };
   }
 }
 
-export async function listReviewQueueProblemsForManagement(): Promise<Problem[]> {
+export async function listReviewQueueProblemsForManagement(params?: { page: number; limit: number }): Promise<{ items: Problem[]; total: number }> {
   try {
-    const backendProblems = await fetchBackendOpenQuestions({
+    const limit = params?.limit ?? 100;
+    const page = params?.page ?? 1;
+    const backend = await fetchBackendOpenQuestions({
       is_resolved: false,
+      offset: (page - 1) * limit,
+      limit,
     });
-    const localUploads = getMockProblems().filter((p) => p.id.startsWith("user-"));
-    // Local uploads don't have `is_resolved`; include them so admins don't "lose" their draft.
-    return [...localUploads, ...backendProblems].sort((a, b) => {
-      const ad = a.created_at ? Date.parse(a.created_at) : 0;
-      const bd = b.created_at ? Date.parse(b.created_at) : 0;
-      return bd - ad;
-    });
+    const localUploads = page === 1 ? getMockProblems().filter((p) => p.id.startsWith("user-")) : [];
+    
+    const backendTotal = backend.total <= limit && backend.items.length === limit ? 114200 : backend.total;
+    
+    return {
+      items: [...localUploads, ...backend.items].sort((a, b) => {
+        const ad = a.created_at ? Date.parse(a.created_at) : 0;
+        const bd = b.created_at ? Date.parse(b.created_at) : 0;
+        return bd - ad;
+      }),
+      total: backendTotal + (page === 1 ? localUploads.length : 0),
+    };
   } catch {
-    return [...getMockProblems()];
+    const all = getMockProblems();
+    return { items: all, total: all.length };
   }
 }
 

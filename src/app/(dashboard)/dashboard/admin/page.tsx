@@ -142,6 +142,9 @@ export default function AdminPage() {
   } | null>(null);
   const [selectedProblemIds, setSelectedProblemIds] = useState<string[]>([]);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+  const [problemsPage, setProblemsPage] = useState(1);
+  const [problemsLimit, setProblemsLimit] = useState(50);
+  const [problemsTotal, setProblemsTotal] = useState(0);
 
   async function refreshUsers() {
     setUsersLoading(true);
@@ -167,17 +170,18 @@ export default function AdminPage() {
   const refreshProblems = useCallback(async () => {
     setProblemsLoading(true);
     try {
-      const items =
+      const res =
         problemMode === "review"
-          ? await listReviewQueueProblemsForManagement()
-          : await listProblemsForManagement();
-      setProblemRows(items);
+          ? await listReviewQueueProblemsForManagement({ page: problemsPage, limit: problemsLimit })
+          : await listProblemsForManagement({ page: problemsPage, limit: problemsLimit });
+      setProblemRows(res.items);
+      setProblemsTotal(res.total);
     } catch (err: unknown) {
       toast.error(getErrorMessage(err) ?? "Failed to load problems.");
     } finally {
       setProblemsLoading(false);
     }
-  }, [problemMode]);
+  }, [problemMode, problemsPage, problemsLimit]);
 
   async function parseFile(file: File) {
     setParsing(true);
@@ -428,11 +432,10 @@ export default function AdminPage() {
             key={item.key}
             type="button"
             onClick={() => setActivePanel(item.key as typeof activePanel)}
-            className={`rounded-xl border px-4 py-3 text-left transition ${
-              activePanel === item.key
+            className={`rounded-xl border px-4 py-3 text-left transition ${activePanel === item.key
                 ? "border-emerald-300 bg-emerald-50"
                 : "border-zinc-200 bg-white hover:bg-zinc-50"
-            }`}
+              }`}
           >
             <div className="flex items-center gap-2 text-sm font-semibold text-zinc-900">
               <item.icon className="h-4 w-4" />
@@ -532,80 +535,79 @@ export default function AdminPage() {
 
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
-                    <thead className="bg-zinc-100 text-zinc-700">
-                      <tr>
-                        <th className="px-3 py-2">ID</th>
-                        <th className="px-3 py-2">Email</th>
-                        <th className="px-3 py-2">Role</th>
-                        <th className="px-3 py-2">Status</th>
-                        <th className="px-3 py-2">Subscription</th>
-                        <th className="px-3 py-2">Action</th>
-                        <th className="px-3 py-2">Created</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {userRows
-                        .filter((u) => {
-                          const q = userSearch.trim().toLowerCase();
-                          if (!q) return true;
-                          return (
-                            u.email.toLowerCase().includes(q) ||
-                            u.id.toLowerCase().includes(q)
-                          );
-                        })
-                        .map((u) => (
-                        <tr key={u.id} className="border-t border-zinc-100">
-                          <td className="px-3 py-2 font-medium text-zinc-900">{u.id.slice(0, 8)}…</td>
-                          <td className="px-3 py-2 text-zinc-600">{u.email}</td>
-                          <td className="px-3 py-2">
-                            <select
-                              value={u.role}
-                              onChange={(e) => void onUpdateUserRole(u.id, normalizeRoleValue(e.target.value))}
-                              className="rounded-md border border-zinc-200 px-2 py-1 text-sm"
-                            >
-                              <option value="owner">Owner</option>
-                              <option value="superadmin">Super Admin</option>
-                              <option value="admin">Admin</option>
-                              <option value="editor">Editor</option>
-                              <option value="reviewer">Reviewer</option>
-                              <option value="user">User</option>
-                            </select>
-                          </td>
-                          <td className="px-3 py-2">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                                (u.is_active ?? true)
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-zinc-200 text-zinc-700"
+                <thead className="bg-zinc-100 text-zinc-700">
+                  <tr>
+                    <th className="px-3 py-2">ID</th>
+                    <th className="px-3 py-2">Email</th>
+                    <th className="px-3 py-2">Role</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Subscription</th>
+                    <th className="px-3 py-2">Action</th>
+                    <th className="px-3 py-2">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {userRows
+                    .filter((u) => {
+                      const q = userSearch.trim().toLowerCase();
+                      if (!q) return true;
+                      return (
+                        u.email.toLowerCase().includes(q) ||
+                        u.id.toLowerCase().includes(q)
+                      );
+                    })
+                    .map((u) => (
+                      <tr key={u.id} className="border-t border-zinc-100">
+                        <td className="px-3 py-2 font-medium text-zinc-900">{u.id.slice(0, 8)}…</td>
+                        <td className="px-3 py-2 text-zinc-600">{u.email}</td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={u.role}
+                            onChange={(e) => void onUpdateUserRole(u.id, normalizeRoleValue(e.target.value))}
+                            className="rounded-md border border-zinc-200 px-2 py-1 text-sm"
+                          >
+                            <option value="owner">Owner</option>
+                            <option value="superadmin">Super Admin</option>
+                            <option value="admin">Admin</option>
+                            <option value="editor">Editor</option>
+                            <option value="reviewer">Reviewer</option>
+                            <option value="user">User</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${(u.is_active ?? true)
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-zinc-200 text-zinc-700"
                               }`}
-                            >
-                              {(u.is_active ?? true) ? "Active" : "Inactive"}
+                          >
+                            {(u.is_active ?? true) ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          {u.subscription_status === "active" ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700 shadow-sm ring-1 ring-amber-200">
+                              <ShieldCheck className="h-3 w-3" />
+                              PRO
                             </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            {u.subscription_status === "active" ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700 shadow-sm ring-1 ring-amber-200">
-                                <ShieldCheck className="h-3 w-3" />
-                                PRO
-                              </span>
-                            ) : (
-                              <span className="text-xs text-zinc-400">Free</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void onToggleUserStatus(u)}
-                            >
-                              {(u.is_active ?? true) ? "Deactivate" : "Activate"}
-                            </Button>
-                          </td>
-                      <td className="px-3 py-2 text-zinc-600">
-                        {u.created_at ? new Date(u.created_at).toLocaleDateString() : "-"}
-                      </td>
-                    </tr>
-                  ))}
+                          ) : (
+                            <span className="text-xs text-zinc-400">Free</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void onToggleUserStatus(u)}
+                          >
+                            {(u.is_active ?? true) ? "Deactivate" : "Activate"}
+                          </Button>
+                        </td>
+                        <td className="px-3 py-2 text-zinc-600">
+                          {u.created_at ? new Date(u.created_at).toLocaleDateString() : "-"}
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -717,32 +719,70 @@ export default function AdminPage() {
               {problemsLoading && <div className="text-sm text-zinc-500">Loading problems...</div>}
 
               <div className="overflow-x-auto">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                    <input
-                      type="checkbox"
-                      checked={
-                        problemRows.slice(0, 50).length > 0 &&
-                        selectedProblemIds.length === problemRows.slice(0, 50).length
-                      }
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedProblemIds(problemRows.slice(0, 50).map((p) => p.id));
-                        } else {
-                          setSelectedProblemIds([]);
+                <div className="mb-3 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                      <input
+                        type="checkbox"
+                        checked={
+                          problemRows.length > 0 &&
+                          selectedProblemIds.length === problemRows.length
                         }
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedProblemIds(problemRows.map((p) => p.id));
+                          } else {
+                            setSelectedProblemIds([]);
+                          }
+                        }}
+                      />
+                      Select all visible
+                    </label>
+                    <div className="flex items-center gap-2 text-sm text-zinc-600">
+                      Page <span className="font-semibold text-zinc-900">{problemsPage}</span> of{" "}
+                      <span className="font-semibold text-zinc-900">{Math.ceil(problemsTotal / problemsLimit)}</span>
+                      <span className="mx-1 text-zinc-300">|</span>
+                      Total: <span className="font-semibold text-zinc-900">{problemsTotal.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={problemsPage <= 1}
+                      onClick={() => setProblemsPage((p) => p - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={problemsPage >= Math.ceil(problemsTotal / problemsLimit)}
+                      onClick={() => setProblemsPage((p) => p + 1)}
+                    >
+                      Next
+                    </Button>
+                    <select
+                      value={problemsLimit}
+                      onChange={(e) => {
+                        setProblemsLimit(Number(e.target.value));
+                        setProblemsPage(1);
                       }}
-                    />
-                    Select all visible
-                  </label>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={selectedProblemIds.length === 0}
-                    onClick={() => setPendingBulkDelete(true)}
-                  >
-                    Delete selected ({selectedProblemIds.length})
-                  </Button>
+                      className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs"
+                    >
+                      <option value={50}>50 / page</option>
+                      <option value={100}>100 / page</option>
+                      <option value={200}>200 / page</option>
+                    </select>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={selectedProblemIds.length === 0}
+                      onClick={() => setPendingBulkDelete(true)}
+                    >
+                      Delete selected ({selectedProblemIds.length})
+                    </Button>
+                  </div>
                 </div>
 
                 <table className="min-w-full text-left text-sm">

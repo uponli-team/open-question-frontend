@@ -16,6 +16,7 @@ export default function ProblemList({
   getProblemHref,
   secondaryLabel,
   getSecondaryHref,
+  hasFullAccess,
 }: {
   problems: Problem[];
   loading: boolean;
@@ -25,6 +26,7 @@ export default function ProblemList({
   getProblemHref?: (problem: Problem) => string;
   secondaryLabel?: string;
   getSecondaryHref?: (problem: Problem) => string | undefined;
+  hasFullAccess?: boolean;
 }) {
   if (loading) {
     return (
@@ -73,6 +75,7 @@ export default function ProblemList({
               href={getProblemHref?.(p)}
               secondaryLabel={secondaryLabel}
               secondaryHref={getSecondaryHref?.(p)}
+              hasFullAccess={hasFullAccess}
             />
           </div>
         </motion.div>

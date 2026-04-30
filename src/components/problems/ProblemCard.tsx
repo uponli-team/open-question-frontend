@@ -19,6 +19,7 @@ export default function ProblemCard({
   href,
   secondaryLabel,
   secondaryHref,
+  hasFullAccess,
 }: {
   problem: Problem;
   onSelect?: (problem: Problem) => void;
@@ -26,6 +27,7 @@ export default function ProblemCard({
   href?: string;
   secondaryLabel?: string;
   secondaryHref?: string;
+  hasFullAccess?: boolean;
 }) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
@@ -34,10 +36,10 @@ export default function ProblemCard({
 
   const created = problem.created_at && mounted
     ? new Date(problem.created_at).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-      })
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    })
     : null;
 
   return (
@@ -56,7 +58,7 @@ export default function ProblemCard({
 
         <div className="mt-4 flex-1">
           <h3 className="text-base font-bold leading-snug text-zinc-900 group-hover:text-emerald-700 transition-colors">
-            {truncate(problem.problem, 140)}
+            {hasFullAccess ? problem.problem : truncate(problem.problem, 140)}
           </h3>
 
           {problem.keywords.length > 0 && (

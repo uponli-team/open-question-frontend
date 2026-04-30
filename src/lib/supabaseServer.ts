@@ -1,5 +1,4 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import {
   isSupabaseConfigured,
   SUPABASE_ANON_KEY,
@@ -8,6 +7,10 @@ import {
 
 export function createServerSupabaseClient() {
   if (!isSupabaseConfigured()) return null;
+
+  // Use dynamic require to avoid bundling next/headers in client components 
+  // if this file is accidentally referenced.
+  const { cookies } = require("next/headers");
 
   return createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
@@ -29,5 +32,11 @@ export function createServerSupabaseClient() {
   });
 }
 
-export { isSupabaseConfigured };
+export async function getSupabaseAccessTokenServer(): Promise<string | null> {
+  const supabase = createServerSupabaseClient();
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
 
+export { isSupabaseConfigured };

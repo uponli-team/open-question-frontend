@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, Search, BrainCircuit } from "lucide-react";
 import { motion } from "framer-motion";
 import AIResearchSynthesis from "@/components/dashboard/AIResearchSynthesis";
+import { getCurrentUserProfile } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { Lock } from "lucide-react";
 
 const LIMIT = 12;
 type Audience = "students" | "researchers";
@@ -40,6 +43,24 @@ export default function DashboardProblemsClient() {
   const [page, setPage] = useState(1);
   const [audience, setAudience] = useState<Audience>("students");
   const [view, setView] = useState<"browse" | "ai-synthesis">("browse");
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string>("inactive");
+  const [userRole, setUserRole] = useState<string>("user");
+  const router = useRouter();
+
+  useEffect(() => {
+    async function loadProfile() {
+      const profile = await getCurrentUserProfile();
+      if (profile) {
+        setSubscriptionStatus(profile.subscription_status || "inactive");
+        setUserRole(profile.role || "user");
+      }
+    }
+    loadProfile();
+  }, []);
+
+  const isSubscribed = subscriptionStatus === "active";
+  const isAdmin = userRole === "admin" || userRole === "superadmin" || userRole === "owner";
+  const hasFullAccess = isSubscribed || isAdmin;
 
   useEffect(() => {
     function sync() {
@@ -47,7 +68,7 @@ export default function DashboardProblemsClient() {
       if (savedAudience === "students" || savedAudience === "researchers") {
         setAudience(savedAudience);
       }
-      
+
       const savedView = localStorage.getItem("oqd_dashboard_view") as "browse" | "ai-synthesis";
       if (savedView === "browse" || savedView === "ai-synthesis") {
         setView(savedView);
@@ -62,13 +83,18 @@ export default function DashboardProblemsClient() {
     localStorage.setItem("oqd_dashboard_view", view);
   }, [view]);
 
-  const { items, total, totalPages, fields, loading, refresh } =
+  const { items: rawItems, total: rawTotal, totalPages: rawTotalPages, fields, loading, refresh } =
     useRealtimeProblems({
       page,
       limit: LIMIT,
       query,
       field,
     });
+
+  // Cap results for free users
+  const total = hasFullAccess ? rawTotal : Math.min(rawTotal, 50);
+  const totalPages = hasFullAccess ? rawTotalPages : Math.ceil(total / LIMIT);
+  const items = hasFullAccess ? rawItems : rawItems.filter((_, idx) => ((page - 1) * LIMIT + idx) < 50);
 
   function onQueryChange(next: string) {
     setQuery(next);
@@ -129,12 +155,19 @@ export default function DashboardProblemsClient() {
         </Button>
         <Button
           size="sm"
-          className="flex-1 rounded-xl"
+          className="flex-1 rounded-xl relative"
           variant={view === "ai-synthesis" ? "default" : "ghost"}
-          onClick={() => setView("ai-synthesis")}
+          onClick={() => {
+            if (hasFullAccess) {
+              setView("ai-synthesis");
+            } else {
+              router.push("/#pricing");
+            }
+          }}
         >
           <BrainCircuit className="h-4 w-4 mr-2" />
           AI Research Synthesis
+          {!hasFullAccess && <Lock className="h-3 w-3 ml-2 text-zinc-400" />}
         </Button>
       </div>
 
@@ -180,6 +213,7 @@ export default function DashboardProblemsClient() {
             problems={items}
             loading={loading}
             ctaLabel="Select to attempt"
+            hasFullAccess={hasFullAccess}
             getProblemHref={(problem) =>
               `/dashboard/problems/${problem.id}?intent=attempt&audience=${audience}`
             }
