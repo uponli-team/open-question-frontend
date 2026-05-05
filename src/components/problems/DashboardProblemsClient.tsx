@@ -92,9 +92,9 @@ export default function DashboardProblemsClient() {
     });
 
   // Cap results for free users
-  const total = hasFullAccess ? rawTotal : Math.min(rawTotal, 50);
+  const total = hasFullAccess ? rawTotal : Math.min(rawTotal, 100);
   const totalPages = hasFullAccess ? rawTotalPages : Math.ceil(total / LIMIT);
-  const items = hasFullAccess ? rawItems : rawItems.filter((_, idx) => ((page - 1) * LIMIT + idx) < 50);
+  const items = hasFullAccess ? rawItems : rawItems.filter((_, idx) => ((page - 1) * LIMIT + idx) < 100);
 
   function onQueryChange(next: string) {
     setQuery(next);
@@ -191,7 +191,7 @@ export default function DashboardProblemsClient() {
             <div className="grid gap-3 md:grid-cols-[1fr_220px]">
               <SearchBar value={query} onChange={onQueryChange} />
               <FilterDropdown
-                fields={fields}
+                fields={hasFullAccess ? fields : fields.slice(0, 5)}
                 value={field}
                 onChange={onFieldChange}
               />

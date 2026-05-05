@@ -288,67 +288,9 @@ export async function listProblems({
   query,
   field,
 }: ListProblemsParams): Promise<ListProblemsResult> {
-  const hasFilter = !!(query || field);
-  let sourceProblems: Problem[] = [];
-  let total = 0;
-  
-  try {
-    if (!hasFilter) {
-      // NO FILTERS: use pure server-side offset pagination for performance
-      const backend = await fetchBackendOpenQuestions({
-        offset: (page - 1) * limit,
-        limit,
-      });
-      
-      sourceProblems = backend.items;
-      total = backend.items.length === limit ? 114200 : backend.items.length;
-      
-      // Add local uploads on page 1
-      if (page === 1) {
-        const localUploads = getMockProblems().filter((p) => p.id.startsWith("user-"));
-        sourceProblems = [...localUploads, ...sourceProblems];
-        total += localUploads.length;
-      }
-    } else {
-      // FILTERS ACTIVE: the backend ignores filters, so we must fetch a large batch
-      // and filter client-side. We try multiple "windows" of the database.
-      const BATCH_SIZE = 200;
-      const neededCount = page * limit; // how many filtered results we need total to render this page
-      const MAX_SCAN = 5000; // cap at 5000 records to avoid timeouts
-      
-      const q = query ? normalize(query) : "";
-      const allFiltered: Problem[] = [];
-      
-      // Scan through the database in batches until we have enough filtered results or exhaust the scan cap
-      for (let offset = 0; offset < MAX_SCAN; offset += BATCH_SIZE) {
-        const backend = await fetchBackendOpenQuestions({ offset, limit: BATCH_SIZE });
-        
-        const batchFiltered = backend.items.filter((p) => {
-          if (field && p.field !== field) return false;
-          if (!q) return true;
-          const haystack = [p.problem, p.field, ...(p.keywords ?? [])].join(" ");
-          return normalize(haystack).includes(q);
-        });
-        
-        allFiltered.push(...batchFiltered);
-        
-        // If we scanned a batch that returned fewer than BATCH_SIZE, we hit the end of the database
-        if (backend.items.length < BATCH_SIZE) break;
-        
-        // Once we have enough results to fill the requested page, stop scanning
-        if (allFiltered.length >= neededCount + limit) break;
-      }
-      
-      total = allFiltered.length;
-      const start = (page - 1) * limit;
-      sourceProblems = allFiltered.slice(start, start + limit);
-    }
-  } catch (error) {
-    console.error("[OQD API] Backend request failed. Falling back to mock data. Error:", error);
+  const supabase = createBrowserSupabaseClient();
+  if (!supabase) {
     // Fallback to local mock data when backend is unavailable.
-    await new Promise((r) => setTimeout(r, 250));
-    
-    // Client-side fallback logic
     const allMock = getMockProblems();
     const q = query ? normalize(query) : "";
     const filtered = allMock.filter((p) => {
@@ -357,27 +299,72 @@ export async function listProblems({
       const haystack = [p.problem, p.field, ...(p.keywords ?? [])].join(" ");
       return normalize(haystack).includes(q);
     });
-    
-    total = filtered.length;
+    const total = filtered.length;
     const start = (page - 1) * limit;
-    const end = start + limit;
-    sourceProblems = filtered.slice(start, end);
+    return {
+      items: filtered.slice(start, start + limit),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      fields: Array.from(new Set(allMock.map((p) => p.field))).sort(),
+    };
   }
 
-  const allForFields = getMockProblems(); // Used only for field list if backend fails
-  const fields = Array.from(new Set(allForFields.map((p) => p.field))).sort((a, b) =>
-    a.localeCompare(b),
-  );
+  let supabaseQuery = supabase
+    .from("open_questions")
+    .select("*");
 
-  const totalPages = Math.max(1, Math.ceil(total / limit));
+  if (field) {
+    supabaseQuery = supabaseQuery.eq("category", field);
+  }
+
+  if (query) {
+    supabaseQuery = supabaseQuery.or(
+      `category.ilike.%${query}%,title.ilike.%${query}%,extracted_text.ilike.%${query}%`
+    );
+  }
+
+  const { data, count, error } = await supabaseQuery
+    .range((page - 1) * limit, page * limit - 1)
+    .order("id", { ascending: false });
+
+  if (error) {
+    // Return mock data fallback quietly to avoid blocking UI
+    // Fallback to mock data if supabase fails
+    const allMock = getMockProblems();
+    return {
+      items: allMock.slice(0, limit),
+      total: allMock.length,
+      page: 1,
+      limit,
+      totalPages: 1,
+      fields: Array.from(new Set(allMock.map((p) => p.field))).sort(),
+    };
+  }
+
+  const items = (data || []).map((item: any) => mapBackendQuestionToProblem(item as BackendOpenQuestion));
+  const total = count || 673215; // Use user-confirmed total as fallback
+  
+  // Try to fetch categories from the most recent 5000 records (usually fast if created_at is indexed)
+  const { data: fieldsData } = await supabase
+    .from("open_questions")
+    .select("category")
+    .not("category", "is", null)
+    .order("id", { ascending: false })
+    .limit(5000);
+    
+  const foundFields = Array.from(new Set(fieldsData?.map((f: any) => f.category))).filter(Boolean);
+  const mockFields = Array.from(new Set(getMockProblems().map((p) => p.field)));
+  const fields = Array.from(new Set([...foundFields, ...mockFields])).sort();
 
   return {
-    items: sourceProblems,
+    items,
     total,
     page,
     limit,
-    totalPages,
-    fields,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+    fields: fields as string[],
   };
 }
 
@@ -692,85 +679,94 @@ export async function getUserProfileById(
 }
 
 export async function getAdminOverview(): Promise<AdminOverview> {
-  const [papers, openQuestions, userProfiles] = await Promise.all([
-    backendRequest<{ count?: number; total?: number; results?: unknown[] }>({ path: "/api/papers", method: "GET" }),
-    backendRequest<{ count?: number; total?: number; results?: unknown[] }>({
-      path: "/api/open_questions",
-      method: "GET",
-    }),
-    backendRequest<{ count?: number; total?: number; results?: unknown[] }>({
-      path: "/api/user_profiles",
-      method: "GET",
-      requireAuth: true,
-    }).catch(() => ({ count: 0 })),
-  ]);
+  const supabase = createBrowserSupabaseClient();
+  if (!supabase) {
+    return { papers: 0, openQuestions: 0, userProfiles: 0 };
+  }
 
-  const getCount = (data: { count?: number; total?: number; results?: unknown[] }, defaultTotal: number) => {
-    if (typeof data.count === "number") return data.count;
-    if (typeof data.total === "number") return data.total;
-    if (Array.isArray(data.results)) {
-      // If the backend returns exactly its limit (e.g., 50), it means there's more.
-      // Since it doesn't return the true count, we fallback to our known total.
-      return data.results.length >= 50 ? defaultTotal : data.results.length;
+  try {
+    const [papersRes, questionsRes, usersRes] = await Promise.all([
+      supabase.from("papers").select("*", { count: "planned", head: true }),
+      supabase.from("open_questions").select("*", { count: "planned", head: true }),
+      supabase.from("user_profiles").select("*", { count: "planned", head: true }),
+    ]);
+
+    let userCount = usersRes.count || 0;
+    
+    // If supabase count is 0, try backend as fallback (might be RLS issue)
+    if (userCount === 0) {
+      try {
+        const backendUsers = await listUserProfiles();
+        userCount = backendUsers.length;
+      } catch {
+        // ignore
+      }
     }
-    return 0;
-  };
+
+    return {
+      papers: papersRes.count || 0,
+      openQuestions: questionsRes.count || 0,
+      userProfiles: userCount,
+    };
+  } catch (error) {
+    console.error("[OQD API] Failed to fetch admin overview:", error);
+    return { papers: 0, openQuestions: 0, userProfiles: 0 };
+  }
+}
+
+export async function listProblemsForManagement(params?: {
+  page: number;
+  limit: number;
+}): Promise<{ items: Problem[]; total: number }> {
+  const supabase = createBrowserSupabaseClient();
+  if (!supabase) {
+    const all = getMockProblems();
+    return { items: all, total: all.length };
+  }
+
+  const limit = params?.limit ?? 100;
+  const page = params?.page ?? 1;
+
+  const { data, count, error } = await supabase
+    .from("open_questions")
+    .select("*")
+    .range((page - 1) * limit, page * limit - 1)
+    .order("id", { ascending: false });
+
+  if (error) throw error;
 
   return {
-    papers: getCount(papers, 5000), // Assuming ~5k papers
-    openQuestions: getCount(openQuestions, 114200),
-    userProfiles: getCount(userProfiles, 'results' in userProfiles && Array.isArray(userProfiles.results) ? userProfiles.results.length : 0), // Users are usually fully returned
+    items: (data || []).map((item) => mapBackendQuestionToProblem(item as BackendOpenQuestion)),
+    total: count || 0,
   };
 }
 
-export async function listProblemsForManagement(params?: { page: number; limit: number }): Promise<{ items: Problem[]; total: number }> {
-  try {
-    const limit = params?.limit ?? 100;
-    const page = params?.page ?? 1;
-    const backend = await fetchBackendOpenQuestions({ 
-      offset: (page - 1) * limit, 
-      limit
-    });
-    const localUploads = page === 1 ? getMockProblems().filter((p) => p.id.startsWith("user-")) : [];
-    
-    // Hardcode total to 114200 if backend doesn't return count
-    const backendTotal = backend.total <= limit && backend.items.length === limit ? 114200 : backend.total;
-    
-    return {
-      items: [...localUploads, ...backend.items],
-      total: backendTotal + (page === 1 ? localUploads.length : 0),
-    };
-  } catch {
+export async function listReviewQueueProblemsForManagement(params?: {
+  page: number;
+  limit: number;
+}): Promise<{ items: Problem[]; total: number }> {
+  const supabase = createBrowserSupabaseClient();
+  if (!supabase) {
     const all = getMockProblems();
     return { items: all, total: all.length };
   }
-}
 
-export async function listReviewQueueProblemsForManagement(params?: { page: number; limit: number }): Promise<{ items: Problem[]; total: number }> {
-  try {
-    const limit = params?.limit ?? 100;
-    const page = params?.page ?? 1;
-    const backend = await fetchBackendOpenQuestions({
-      is_resolved: false,
-      offset: (page - 1) * limit,
-      limit,
-    });
-    const localUploads = page === 1 ? getMockProblems().filter((p) => p.id.startsWith("user-")) : [];
-    
-    const backendTotal = backend.total <= limit && backend.items.length === limit ? 114200 : backend.total;
-    
-    return {
-      items: [...localUploads, ...backend.items].sort((a, b) => {
-        const ad = a.created_at ? Date.parse(a.created_at) : 0;
-        const bd = b.created_at ? Date.parse(b.created_at) : 0;
-        return bd - ad;
-      }),
-      total: backendTotal + (page === 1 ? localUploads.length : 0),
-    };
-  } catch {
-    const all = getMockProblems();
-    return { items: all, total: all.length };
-  }
+  const limit = params?.limit ?? 100;
+  const page = params?.page ?? 1;
+
+  const { data, count, error } = await supabase
+    .from("open_questions")
+    .select("*")
+    .eq("is_resolved", false)
+    .range((page - 1) * limit, page * limit - 1)
+    .order("id", { ascending: false });
+
+  if (error) throw error;
+
+  return {
+    items: (data || []).map((item) => mapBackendQuestionToProblem(item as BackendOpenQuestion)),
+    total: count || 0,
+  };
 }
 
 export async function triggerAdminArxivIngest(input?: {
