@@ -729,7 +729,7 @@ export async function listProblemsForManagement(params?: {
 
   const { data, count, error } = await supabase
     .from("open_questions")
-    .select("*")
+    .select("*", { count: "planned" })
     .range((page - 1) * limit, page * limit - 1)
     .order("id", { ascending: false });
 
@@ -756,7 +756,7 @@ export async function listReviewQueueProblemsForManagement(params?: {
 
   const { data, count, error } = await supabase
     .from("open_questions")
-    .select("*")
+    .select("*", { count: "planned" })
     .eq("is_resolved", false)
     .range((page - 1) * limit, page * limit - 1)
     .order("id", { ascending: false });

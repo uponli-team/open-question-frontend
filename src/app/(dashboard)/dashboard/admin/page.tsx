@@ -404,10 +404,10 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (activePanel === "problems" && problemRows.length === 0 && !problemsLoading) {
+    if (activePanel === "problems") {
       void refreshProblems();
     }
-  }, [activePanel, problemRows.length, problemsLoading, problemMode, refreshProblems]);
+  }, [activePanel, problemMode, problemsPage, problemsLimit, refreshProblems]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -796,7 +796,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {problemRows.slice(0, 50).map((p) => (
+                    {problemRows.map((p) => (
                       <tr key={p.id} className="border-t border-zinc-100">
                         <td className="px-3 py-2">
                           <input
