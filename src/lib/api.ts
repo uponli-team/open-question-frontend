@@ -1,4 +1,5 @@
 import type { Problem } from "@/types/problem";
+import type { MCPProblem, Solution, ChatMessage } from "@/types/mcp";
 import {
   addMockProblems,
   deleteMockProblem,
@@ -891,4 +892,108 @@ export async function subscribeToPlan(priceId: string): Promise<{ url: string }>
     requireAuth: true,
   });
 }
+export async function chatWithNvidiaAI(
+  messages: ChatMessage[],
+  model: string = "meta/llama-3.1-8b-instruct"
+): Promise<{ choices: { message: ChatMessage }[] }> {
+  const data = await backendRequest<any>({
+    path: "/api/ai/nvidia/chat",
+    method: "POST",
+    body: { model, messages },
+    requireAuth: true,
+  });
 
+  // Handle various response formats
+  if (data?.choices?.[0]?.message) {
+    return data;
+  }
+  
+  if (typeof data === "string") {
+    return { choices: [{ message: { role: "assistant", content: data } }] };
+  }
+
+  if (data?.content || data?.text || data?.response) {
+    return { choices: [{ message: { role: "assistant", content: data.content || data.text || data.response } }] };
+  }
+
+  return data;
+}
+
+export async function listMCPProblems(): Promise<{ problems: MCPProblem[] }> {
+  const data = await backendRequest<any>({
+    path: "/api/mcp/problems",
+    method: "GET",
+    requireAuth: true,
+  }).catch(err => {
+    console.error("[API] MCP Problems fetch failed:", err);
+    return { problems: [] };
+  });
+
+  console.log("[API] Raw MCP Problems response:", data);
+  
+  // Support both { problems: [...] } and [...] formats
+  const problems = Array.isArray(data) ? data : data?.problems || data?.results || [];
+  return { problems };
+}
+
+export async function listSolutions(problemId?: string): Promise<Solution[]> {
+  const qs = problemId ? `?problem_id=${encodeURIComponent(problemId)}` : "";
+  const data = await backendRequest<any>({
+    path: `/api/solutions${qs}`,
+    method: "GET",
+    requireAuth: true,
+  });
+  
+  if (!data) return [];
+  const items = Array.isArray(data) ? data : data.results || data.solutions || data.data || [];
+  
+  // Resolve proposer names by fetching profiles for unique user IDs
+  const userIds = Array.from(new Set(items.map((s: any) => s.user_id).filter(Boolean)));
+  const profileResults = await Promise.all(
+    userIds.map(id => getUserProfileById(id as string).catch(() => null))
+  );
+  const profileMap = Object.fromEntries(
+    profileResults.filter(p => p).map(p => [p!.id, p!.email])
+  );
+
+  return items.map((s: any) => ({
+    ...s,
+    proposer_name: s.proposer_name || profileMap[s.user_id] || s.user_email || "User"
+  }));
+}
+
+export async function submitSolution(problemId: string, text: string): Promise<Solution> {
+  const created = await backendRequest<Solution>({
+    path: "/api/solutions",
+    method: "POST",
+    body: { problem_id: problemId, solution_text: text },
+    requireAuth: true,
+  });
+
+  // Fetch the name for the newly created solution (it's the current user)
+  if (created && created.user_id) {
+    const profile = await getUserProfileById(created.user_id).catch(() => null);
+    if (profile) {
+      (created as any).proposer_name = profile.email;
+    }
+  }
+  return created;
+}
+
+export async function voteSolution(solutionId: string, type: "up" | "down"): Promise<Solution> {
+  const updated = await backendRequest<Solution>({
+    path: `/api/solutions/${encodeURIComponent(solutionId)}/vote`,
+    method: "POST",
+    body: { type },
+    requireAuth: true,
+  });
+
+  // Fetch the name for the updated solution (it's the proposer)
+  if (updated && updated.user_id) {
+    const profile = await getUserProfileById(updated.user_id).catch(() => null);
+    if (profile) {
+      (updated as any).proposer_name = profile.email;
+    }
+  }
+  return updated;
+}

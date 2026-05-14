@@ -235,6 +235,13 @@ export default function Navbar() {
                       Dashboard
                     </Link>
                     <Link
+                      href="/dashboard/ai-researcher"
+                      className="block rounded-xl px-3 py-2 text-sm text-emerald-600 font-semibold hover:bg-emerald-50"
+                      onClick={closeMenus}
+                    >
+                      AI Researcher
+                    </Link>
+                    <Link
                       href="/dashboard/settings"
                       className="block rounded-xl px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
                       onClick={closeMenus}
@@ -349,13 +356,22 @@ export default function Navbar() {
               </a>
             ))}
             {user && (
-              <Link
-                href="/dashboard"
-                className="block rounded-lg px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50"
-                onClick={() => setOpen(false)}
-              >
-                Dashboard
-              </Link>
+              <>
+                <Link
+                  href="/dashboard"
+                  className="block rounded-lg px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50"
+                  onClick={() => setOpen(false)}
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/dashboard/ai-researcher"
+                  className="block rounded-lg px-3 py-2 text-base font-semibold text-emerald-600 hover:bg-emerald-50"
+                  onClick={() => setOpen(false)}
+                >
+                  AI Researcher
+                </Link>
+              </>
             )}
             {user ? (
               <>
