@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { listSolutions, voteSolution, submitSolution } from "@/lib/api";
+import { createBrowserSupabaseClient } from "@/lib/supabaseClient";
 import type { Solution, MCPProblem } from "@/types/mcp";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,13 @@ export default function SolutionFeed({ problem }: SolutionFeedProps) {
     if (!problem) return;
     setLoading(true);
     try {
-      const data = await listSolutions(problem.id);
+      const supabase = createBrowserSupabaseClient();
+      let userId = undefined;
+      if (supabase) {
+        const { data } = await supabase.auth.getUser();
+        userId = data.user?.id;
+      }
+      const data = await listSolutions(problem.id, userId);
       setSolutions(data);
     } catch (err) {
       console.error("Failed to load solutions", err);
@@ -43,7 +50,7 @@ export default function SolutionFeed({ problem }: SolutionFeedProps) {
   async function handleVote(id: string, type: "up" | "down") {
     try {
       const updated = await voteSolution(id, type);
-      setSolutions((prev) => prev.map((s) => (s.id === id ? updated : s)));
+      setSolutions((prev) => prev.map((s) => (s.id === id ? { ...updated, viewer_vote: type } : s)));
       toast.success(`Solution ${type}voted!`);
     } catch (err: any) {
       toast.error(err.message || "Voting failed");
@@ -146,19 +153,29 @@ export default function SolutionFeed({ problem }: SolutionFeedProps) {
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-8 px-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-600"
+                                className={cn(
+                                  "h-8 px-2 rounded-lg transition-colors",
+                                  (s as any).viewer_vote === "up" 
+                                    ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" 
+                                    : "hover:bg-emerald-50 hover:text-emerald-600"
+                                )}
                                 onClick={() => handleVote(s.id, "up")}
                               >
-                                <ThumbsUp className="h-4 w-4 mr-1.5" />
+                                <ThumbsUp className={cn("h-4 w-4 mr-1.5", (s as any).viewer_vote === "up" && "fill-current")} />
                                 <span className="text-xs font-bold">{s.upvotes}</span>
                               </Button>
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-8 px-2 rounded-lg hover:bg-red-50 hover:text-red-600"
+                                className={cn(
+                                  "h-8 px-2 rounded-lg transition-colors",
+                                  (s as any).viewer_vote === "down" 
+                                    ? "bg-red-100 text-red-700 hover:bg-red-200" 
+                                    : "hover:bg-red-50 hover:text-red-600"
+                                )}
                                 onClick={() => handleVote(s.id, "down")}
                               >
-                                <ThumbsDown className="h-4 w-4 mr-1.5" />
+                                <ThumbsDown className={cn("h-4 w-4 mr-1.5", (s as any).viewer_vote === "down" && "fill-current")} />
                                 <span className="text-xs font-bold">{s.downvotes}</span>
                               </Button>
                             </div>

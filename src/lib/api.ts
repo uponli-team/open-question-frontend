@@ -314,7 +314,7 @@ export async function listProblems({
 
   let supabaseQuery = supabase
     .from("open_questions")
-    .select("*");
+    .select("*", { count: "planned" });
 
   if (field) {
     supabaseQuery = supabaseQuery.eq("category", field);
@@ -345,7 +345,7 @@ export async function listProblems({
   }
 
   const items = (data || []).map((item: any) => mapBackendQuestionToProblem(item as BackendOpenQuestion));
-  const total = count || 673215; // Use user-confirmed total as fallback
+  const total = count || items.length;
   
   // Try to fetch categories from the most recent 5000 records (usually fast if created_at is indexed)
   const { data: fieldsData } = await supabase
@@ -370,13 +370,48 @@ export async function listProblems({
 }
 
 export async function getProblemById(id: string, tokenOverride?: string | null) {
+  // Try Supabase direct query first — this reliably filters by the exact ID
+  try {
+    // Server-side: use server client if available
+    if (typeof window === "undefined") {
+      const { createServerSupabaseClient } = require("@/lib/supabaseServer");
+      const supabase = createServerSupabaseClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("open_questions")
+          .select("*")
+          .eq("id", id)
+          .single();
+        if (!error && data) {
+          return mapBackendQuestionToProblem(data as BackendOpenQuestion);
+        }
+      }
+    } else {
+      // Client-side: use browser client
+      const supabase = createBrowserSupabaseClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("open_questions")
+          .select("*")
+          .eq("id", id)
+          .single();
+        if (!error && data) {
+          return mapBackendQuestionToProblem(data as BackendOpenQuestion);
+        }
+      }
+    }
+  } catch {
+    // Fall through to backend API
+  }
+
+  // Fallback: try the backend API
   try {
     const token = tokenOverride !== undefined ? tokenOverride : await getSupabaseAccessToken();
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
 
     const res = await fetch(
-      `${DEPLOYED_BACKEND_BASE_URL}/api/open_questions?id=${encodeURIComponent(id)}`,
+      `${DEPLOYED_BACKEND_BASE_URL}/api/open_questions/${encodeURIComponent(id)}`,
       {
         method: "GET",
         headers,
@@ -384,9 +419,14 @@ export async function getProblemById(id: string, tokenOverride?: string | null) 
       },
     );
     if (res.ok) {
-      const data = (await res.json()) as { results?: BackendOpenQuestion[] };
-      const first = Array.isArray(data.results) ? data.results[0] : undefined;
-      if (first) return mapBackendQuestionToProblem(first);
+      const data = (await res.json()) as BackendOpenQuestion | { results?: BackendOpenQuestion[] };
+      // Handle both single object and results array formats
+      if ('results' in data && Array.isArray(data.results) && data.results.length > 0) {
+        return mapBackendQuestionToProblem(data.results[0]);
+      }
+      if ('id' in data && data.id) {
+        return mapBackendQuestionToProblem(data as BackendOpenQuestion);
+      }
     }
   } catch {
     // Fallback below.
@@ -936,41 +976,70 @@ export async function listMCPProblems(): Promise<{ problems: MCPProblem[] }> {
   return { problems };
 }
 
-export async function listSolutions(problemId?: string): Promise<Solution[]> {
-  const qs = problemId ? `?problem_id=${encodeURIComponent(problemId)}` : "";
-  const data = await backendRequest<any>({
-    path: `/api/solutions${qs}`,
-    method: "GET",
-    requireAuth: true,
-  });
-  
-  if (!data) return [];
-  const items = Array.isArray(data) ? data : data.results || data.solutions || data.data || [];
-  
-  // Resolve proposer names by fetching profiles for unique user IDs
-  const userIds = Array.from(new Set(items.map((s: any) => s.user_id).filter(Boolean)));
-  const profileResults = await Promise.all(
-    userIds.map(id => getUserProfileById(id as string).catch(() => null))
-  );
-  const profileMap = Object.fromEntries(
-    profileResults.filter(p => p).map(p => [p!.id, p!.email])
-  );
+export async function listSolutions(problemId?: string, viewerId?: string): Promise<Solution[]> {
+  try {
+    const params = new URLSearchParams();
+    if (problemId) params.append("problem_id", problemId);
+    if (viewerId) params.append("viewer_id", viewerId);
+    
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    const res = await fetch(`/api/solutions${qs}`, {
+      method: "GET",
+      cache: "no-store",
+    });
 
-  return items.map((s: any) => ({
-    ...s,
-    proposer_name: s.proposer_name || profileMap[s.user_id] || s.user_email || "User"
-  }));
+    if (!res.ok) {
+      throw new Error(`Failed to fetch solutions: ${res.status}`);
+    }
+
+    const data = await res.json();
+    const items = data.solutions || [];
+
+    // Resolve proposer names by fetching profiles for unique user IDs
+    const userIds = Array.from(new Set(items.map((s: any) => s.user_id).filter(Boolean)));
+    const profileResults = await Promise.all(
+      userIds.map(id => getUserProfileById(id as string).catch(() => null))
+    );
+    const profileMap = Object.fromEntries(
+      profileResults.filter(p => p).map(p => [p!.id, p!.email])
+    );
+
+    return items.map((s: any) => ({
+      ...s,
+      proposer_name: s.proposer_name || profileMap[s.user_id] || s.user_email || "User",
+      viewer_vote: (s as any).viewer_vote // Preserve viewer vote status if returned
+    }));
+  } catch (err) {
+    console.error("[API] listSolutions failed:", err);
+    return [];
+  }
 }
 
 export async function submitSolution(problemId: string, text: string): Promise<Solution> {
-  const created = await backendRequest<Solution>({
-    path: "/api/solutions",
+  const supabase = createBrowserSupabaseClient();
+  let userId = null;
+  if (supabase) {
+    const { data } = await supabase.auth.getUser();
+    userId = data.user?.id;
+  }
+
+  const res = await fetch("/api/solutions", {
     method: "POST",
-    body: { problem_id: problemId, solution_text: text },
-    requireAuth: true,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      problem_id: problemId,
+      solution_text: text,
+      user_id: userId
+    }),
   });
 
-  // Fetch the name for the newly created solution (it's the current user)
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || "Failed to submit solution");
+  }
+
+  const created = await res.json();
+
   if (created && created.user_id) {
     const profile = await getUserProfileById(created.user_id).catch(() => null);
     if (profile) {
@@ -981,14 +1050,34 @@ export async function submitSolution(problemId: string, text: string): Promise<S
 }
 
 export async function voteSolution(solutionId: string, type: "up" | "down"): Promise<Solution> {
-  const updated = await backendRequest<Solution>({
-    path: `/api/solutions/${encodeURIComponent(solutionId)}/vote`,
+  const supabase = createBrowserSupabaseClient();
+  let userId = null;
+  if (supabase) {
+    const { data } = await supabase.auth.getUser();
+    userId = data.user?.id;
+  }
+
+  if (!userId) {
+    throw new Error("You must be logged in to vote.");
+  }
+
+  const res = await fetch("/api/solutions/vote", {
     method: "POST",
-    body: { type },
-    requireAuth: true,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      solution_id: solutionId,
+      type,
+      user_id: userId
+    }),
   });
 
-  // Fetch the name for the updated solution (it's the proposer)
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || "Failed to vote");
+  }
+
+  const updated = await res.json();
+
   if (updated && updated.user_id) {
     const profile = await getUserProfileById(updated.user_id).catch(() => null);
     if (profile) {
