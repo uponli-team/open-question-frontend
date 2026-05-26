@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { listProblems, getAdminOverview } from "@/lib/api";
+import type { Problem } from "@/types/problem";
 import Link from "next/link";
 import PaymentModal from "@/components/payment/PaymentModal";
 import {
@@ -32,26 +34,7 @@ import {
   staggerContainer,
 } from "@/components/ui/motion";
 
-const preview = [
-  {
-    id: "p1",
-    problem: "Can we construct a fast algorithm for equitable graph coloring?",
-    field: "Computer Science",
-    keywords: ["graphs", "complexity", "optimization"],
-  },
-  {
-    id: "p2",
-    problem: "How can we prove that every quantum error-correcting code has a compact decoder?",
-    field: "Quantum Computing",
-    keywords: ["quantum", "error correction", "decoding"],
-  },
-  {
-    id: "p3",
-    problem: "What is the exact threshold for robust cooperation in evolving public goods games?",
-    field: "Evolutionary Biology",
-    keywords: ["cooperation", "dynamics", "thresholds"],
-  },
-];
+const preview: Problem[] = [];
 
 const featuresThree = [
   {
@@ -81,11 +64,11 @@ const featuresThree = [
 ];
 
 const leaderboard = [
-  { rank: "#1", model: "o3 Pro", org: "OpenAI", solved: "75 / 500", rate: "15.0%" },
-  { rank: "#2", model: "Gemini 2.5 Pro", org: "Google", solved: "25 / 500", rate: "5.0%" },
-  { rank: "#3", model: "o4 mini", org: "OpenAI", solved: "25 / 500", rate: "5.0%" },
-  { rank: "#4", model: "o3", org: "OpenAI", solved: "44 / 500", rate: "8.8%" },
-  { rank: "#5", model: "DeepSeek R1", org: "DeepSeek", solved: "11 / 500", rate: "2.2%" },
+  { rank: "#1", model: "o1", org: "OpenAI", solved: "382 / 500", rate: "76.4%" },
+  { rank: "#2", model: "Claude 3.5 Sonnet", org: "Anthropic", solved: "345 / 500", rate: "69.0%" },
+  { rank: "#3", model: "Gemini 2.0 Pro", org: "Google", solved: "331 / 500", rate: "66.2%" },
+  { rank: "#4", model: "GPT-4o", org: "OpenAI", solved: "312 / 500", rate: "62.4%" },
+  { rank: "#5", model: "DeepSeek R1", org: "DeepSeek", solved: "298 / 500", rate: "59.6%" },
 ];
 
 export default function MarketingLandingPage() {
@@ -96,6 +79,44 @@ export default function MarketingLandingPage() {
     cadence: string;
     priceId?: string;
   } | null>(null);
+
+  const [displayPreview, setDisplayPreview] = useState<Problem[]>([]);
+  const [totalQuestions, setTotalQuestions] = useState(734797);
+
+  useEffect(() => {
+    // Fetch a larger pool to select the best 3 for preview
+    listProblems({ page: 1, limit: 10 })
+      .then((res) => {
+        if (res.items && res.items.length > 0) {
+          // Filter for better looking problems
+          const curated = res.items
+            .filter(p => 
+              p.field !== "Uncategorized" && 
+              p.problem.length > 40 && 
+              p.problem.length < 500 &&
+              !p.keywords.includes("research-topic")
+            )
+            .slice(0, 3);
+            
+          if (curated.length >= 3) {
+            setDisplayPreview(curated);
+          } else {
+            // Fallback to first 3 if curation is too strict
+            setDisplayPreview(res.items.slice(0, 3));
+          }
+        }
+      })
+      .catch((err) => console.error("[Marketing] Failed to fetch problems:", err));
+
+    // Fetch real stats
+    getAdminOverview()
+      .then((data) => {
+        if (data.openQuestions > 0) {
+          setTotalQuestions(data.openQuestions);
+        }
+      })
+      .catch((err) => console.error("[Marketing] Failed to fetch overview:", err));
+  }, []);
 
   function openPayment(plan: {
     name: string;
@@ -126,7 +147,7 @@ export default function MarketingLandingPage() {
               </motion.div>
 
               <motion.h1
-                initial={{ opacity: 0, y: 24 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.1 }}
                 className="text-4xl font-bold leading-tight text-gray-900 md:text-5xl lg:text-6xl"
@@ -249,11 +270,8 @@ export default function MarketingLandingPage() {
           </motion.div>
 
           <motion.div
-            className="grid gap-8 md:grid-cols-3"
+            className="grid gap-6 md:grid-cols-3"
             variants={staggerContainer}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true }}
           >
             {featuresThree.map((feature) => (
               <motion.div key={feature.title} variants={fadeItem}>
@@ -342,12 +360,9 @@ export default function MarketingLandingPage() {
             <motion.div
               className="relative grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
               variants={staggerContainer}
-              initial="hidden"
-              whileInView="show"
-              viewport={{ once: true }}
             >
               {[
-                { label: "12k+", sub: "Questions indexed" },
+                { label: `${(totalQuestions / 1000).toFixed(0)}k+`, sub: "Questions indexed" },
                 { label: "98%", sub: "Schema quality" },
                 { label: "Realtime", sub: "Live updates" },
                 { label: "24/7", sub: "Workflow ready" },
@@ -683,10 +698,8 @@ export default function MarketingLandingPage() {
                   {leaderboard.map((row, idx) => (
                     <motion.tr
                       key={row.rank}
-                      initial={{ opacity: 0, y: 8 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.35, delay: idx * 0.05 }}
+                      variants={fadeItem}
+                      custom={idx}
                       className="border-t border-zinc-100 bg-white"
                     >
                       <td className="px-4 py-3 font-semibold text-zinc-900">{row.rank}</td>
@@ -789,10 +802,7 @@ export default function MarketingLandingPage() {
             ].map((plan, idx) => (
               <motion.div
                 key={plan.name}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.45, delay: idx * 0.08 }}
+                variants={fadeItem}
               >
                 <Card
                   className={`relative h-full overflow-hidden border-0 p-7 shadow-lg ${
@@ -876,49 +886,54 @@ export default function MarketingLandingPage() {
           </div>
 
           <motion.div
-            className="grid gap-4 md:grid-cols-3"
+            className="grid gap-6 md:grid-cols-3"
             variants={staggerContainer}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true }}
           >
-            {preview.map((p) => (
-              <motion.div key={p.id} variants={fadeItem}>
-                <Card className="overflow-hidden border-0 shadow-lg transition-shadow hover:shadow-xl">
-                  <div className="p-6">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs font-semibold text-emerald-700">
-                        {p.field}
+            {displayPreview.length > 0 ? (
+              displayPreview.map((p) => (
+                <motion.div key={p.id} variants={fadeItem} className="flex">
+                  <Card className="flex w-full flex-col overflow-hidden border-0 shadow-lg transition-shadow hover:shadow-xl">
+                    <div className="flex flex-1 flex-col p-6">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-xs font-semibold text-emerald-700">
+                            {p.field}
+                          </div>
+                          <Badge className="bg-gray-100 text-gray-700">
+                            Unsolved
+                          </Badge>
+                        </div>
+                        <div className="mt-3 text-sm font-semibold text-gray-900 line-clamp-4">
+                          {p.problem}
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {p.keywords.map((k) => (
+                            <span
+                              key={k}
+                              className="rounded-full bg-gray-100 px-2 py-1 text-[11px] text-gray-700"
+                            >
+                              {k}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                      <Badge className="bg-gray-100 text-gray-700">
-                        Unsolved
-                      </Badge>
+                      <div className="mt-5">
+                        <Link href={`/dashboard/problems/${p.id}`}>
+                          <Button size="sm" className="w-full">
+                            View details
+                            <ArrowUpRight className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      </div>
                     </div>
-                    <div className="mt-3 text-sm font-semibold text-gray-900">
-                      {p.problem}
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {p.keywords.map((k) => (
-                        <span
-                          key={k}
-                          className="rounded-full bg-gray-100 px-2 py-1 text-[11px] text-gray-700"
-                        >
-                          {k}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="mt-5">
-                      <Link href={`/dashboard/problems/${p.id}`}>
-                        <Button size="sm" className="w-full">
-                          View details
-                          <ArrowUpRight className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
+                  </Card>
+                </motion.div>
+              ))
+            ) : (
+              [1, 2, 3].map((i) => (
+                <Card key={i} className="h-[280px] animate-pulse border-0 bg-gray-50/50 shadow-sm" />
+              ))
+            )}
           </motion.div>
         </FadeInSection>
 

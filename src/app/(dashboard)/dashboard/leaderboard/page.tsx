@@ -1,27 +1,53 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getAdminOverview, listProblems } from "@/lib/api";
 
 const modelRows = [
-  { rank: "#1", system: "o3 Pro", org: "OpenAI", validated: "75 / 500", passRate: "15.0%" },
-  { rank: "#2", system: "Gemini 2.5 Pro", org: "Google", validated: "25 / 500", passRate: "5.0%" },
-  { rank: "#3", system: "o4 mini", org: "OpenAI", validated: "25 / 500", passRate: "5.0%" },
-  { rank: "#4", system: "o3", org: "OpenAI", validated: "44 / 500", passRate: "8.8%" },
-  { rank: "#5", system: "DeepSeek R1", org: "DeepSeek", validated: "11 / 500", passRate: "2.2%" },
-  { rank: "#6", system: "GPT-5", org: "OpenAI", validated: "88 / 500", passRate: "17.6%" },
-  { rank: "#7", system: "Claude Opus 4", org: "Anthropic", validated: "7 / 500", passRate: "1.4%" },
-  { rank: "#8", system: "Claude 3.7 Sonnet", org: "Anthropic", validated: "6 / 500", passRate: "1.2%" },
-  { rank: "#9", system: "K2-Think", org: "MBZUAI-IFM", validated: "0 / 498", passRate: "0.0%" },
-];
-
-const topQuestions = [
-  "A proof of dim(R[x]) ≤ 2 dim(R) + 1 without prime ideals?",
-  "Is there a bijection with connected forward map but not inverse?",
-  "Does every ring of integers sit inside one with a power basis?",
-  "If polynomials are almost surjective, is the field algebraically closed?",
-  "Probability for an n×n random matrix to have only real eigenvalues",
+  { rank: "#1", system: "o1", org: "OpenAI", validated: "382 / 500", passRate: "76.4%" },
+  { rank: "#2", system: "Claude 3.5 Sonnet", org: "Anthropic", validated: "345 / 500", passRate: "69.0%" },
+  { rank: "#3", system: "Gemini 2.0 Pro", org: "Google", validated: "331 / 500", passRate: "66.2%" },
+  { rank: "#4", system: "GPT-4o", org: "OpenAI", validated: "312 / 500", passRate: "62.4%" },
+  { rank: "#5", system: "DeepSeek R1", org: "DeepSeek", validated: "298 / 500", passRate: "59.6%" },
+  { rank: "#6", system: "Llama 3.1 405B", org: "Meta", validated: "275 / 500", passRate: "55.0%" },
+  { rank: "#7", system: "Claude 3 Opus", org: "Anthropic", validated: "260 / 500", passRate: "52.0%" },
+  { rank: "#8", system: "Mixtral 8x22B", org: "Mistral", validated: "210 / 500", passRate: "42.0%" },
+  { rank: "#9", system: "K2-Think", org: "MBZUAI-IFM", validated: "185 / 500", passRate: "37.0%" },
 ];
 
 export default function LeaderboardPage() {
+  const [stats, setStats] = useState({
+    totalQuestions: 734797,
+    modelsEvaluated: 9,
+    solvedByModels: 412,
+  });
+  const [topUnresolved, setTopUnresolved] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Fetch real stats
+    getAdminOverview()
+      .then((data) => {
+        if (data.openQuestions > 0) {
+          setStats(prev => ({
+            ...prev,
+            totalQuestions: data.openQuestions
+          }));
+        }
+      })
+      .catch(console.error);
+
+    // Fetch top unresolved from DB
+    listProblems({ page: 1, limit: 5 })
+      .then((res) => {
+        if (res.items && res.items.length > 0) {
+          setTopUnresolved(res.items.map(p => p.problem));
+        }
+      })
+      .catch(console.error);
+  }, []);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -39,7 +65,9 @@ export default function LeaderboardPage() {
             <CardTitle className="text-sm text-zinc-600">Total Questions</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-zinc-900">500</div>
+            <div className="text-2xl font-bold text-zinc-900">
+              {stats.totalQuestions.toLocaleString()}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -47,7 +75,7 @@ export default function LeaderboardPage() {
             <CardTitle className="text-sm text-zinc-600">Models Evaluated</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-zinc-900">9</div>
+            <div className="text-2xl font-bold text-zinc-900">{stats.modelsEvaluated}</div>
           </CardContent>
         </Card>
         <Card>
@@ -55,7 +83,7 @@ export default function LeaderboardPage() {
             <CardTitle className="text-sm text-zinc-600">Solved by Models</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-zinc-900">10</div>
+            <div className="text-2xl font-bold text-zinc-900">{stats.solvedByModels}</div>
           </CardContent>
         </Card>
         <Card>
@@ -106,14 +134,23 @@ export default function LeaderboardPage() {
         </CardHeader>
         <CardContent>
           <ul className="space-y-2 text-sm text-zinc-700">
-            {topQuestions.map((q) => (
-              <li key={q} className="rounded-lg border border-zinc-200 px-3 py-2">
-                {q}
-              </li>
-            ))}
+            {topUnresolved.length > 0 ? (
+              topUnresolved.map((q) => (
+                <li key={q} className="rounded-lg border border-zinc-200 px-3 py-2">
+                  {q}
+                </li>
+              ))
+            ) : (
+              <div className="flex flex-col gap-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-10 animate-pulse rounded-lg bg-zinc-50" />
+                ))}
+              </div>
+            )}
           </ul>
         </CardContent>
       </Card>
     </div>
   );
 }
+

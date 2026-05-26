@@ -118,15 +118,22 @@ function mapBackendQuestionToProblem(item: BackendOpenQuestion): Problem {
   const field =
     item.category?.trim() || item.source_type?.trim() || "Uncategorized";
 
+  const SYSTEM_KEYS = new Set([
+    "model", "batch_job_id", "extracted_at", "original_source", 
+    "source_type", "paper_id", "category", "created_at"
+  ]);
+
   const fromIndicators = keywordsFromUnknown(item.unsolved_indicators);
   const fromMetadata = keywordsFromUnknown(item.croissant_metadata);
-  const keywords = Array.from(new Set([...fromIndicators, ...fromMetadata])).slice(0, 8);
+  const keywords = Array.from(new Set([...fromIndicators, ...fromMetadata]))
+    .filter(k => k && k.length > 2 && !SYSTEM_KEYS.has(k.toLowerCase()))
+    .slice(0, 8);
 
   return {
     id: item.id,
     problem: primaryText,
     field,
-    keywords: keywords.length > 0 ? keywords : ["open-question"],
+    keywords: keywords.length > 0 ? keywords : ["research-topic"],
     created_at: item.created_at ?? undefined,
     extracted_text: item.extracted_text ?? undefined,
     structured_summary: item.structured_summary ?? undefined,

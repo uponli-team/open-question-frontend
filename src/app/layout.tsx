@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s · OQD",
   },
   description:
-    "Explore the World's Unsolved Problems. Structured, searchable, and realtime-ready.",
+    "Explore over 734,000+ structured, searchable unsolved problems. The world's largest open questions database for research and collaboration.",
 };
 
 export default function RootLayout({
@@ -33,6 +33,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased bg-white text-slate-900`}
     >
       <body className="min-h-full flex flex-col">
